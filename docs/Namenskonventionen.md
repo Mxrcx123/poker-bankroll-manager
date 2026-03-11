@@ -11,8 +11,8 @@
 * Datum mit Bindestrichen dazwischen im Format Jahr-Monat-Tag
 
 **Beispiele:**
-* Titel_11-03-2026
-Titel_des_Projekts_11-03-2026
+* Titel_2026-03-11
+* Titel_des_Projekts_2026-03-11
 
 ## Im Codespace:
 ### 1. Name von Klassen
@@ -43,7 +43,7 @@ Titel_des_Projekts_11-03-2026
 * file_path = "/data/input.csv"
 * model_accuracy = 0.92
 * Kurzlebige Variablen (z.B. Schleifen)
-* for i in range(10):
+* for i in range(10):  
     ...
 
 ### 3. Name von Namespaces / Modulen
