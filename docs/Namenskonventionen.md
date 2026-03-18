@@ -21,7 +21,6 @@
 **Regeln:**
 * Jedes Wort beginnt mit einem Großbuchstaben
 * Keine Unterstriche
-* Substantive verwenden (Objekte / Konzepte)
 
 **Beispiele:**
 * class User:
