@@ -1,7 +1,7 @@
 import sqlalchemy
 from fastapi import FastAPI
 from sqlalchemy.orm import Session
-from Crud.crud import create_user, get_user_by_id, update_user_by_id, delete_user_by_id
+from Crud.userCrud import create_user, get_user_by_id, update_user_by_id, delete_user_by_id
 
 app = FastAPI()
 
