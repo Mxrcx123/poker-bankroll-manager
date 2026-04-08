@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import AddDeposit from "./AddDeposit.jsx";
+import RecordWithdrawal from "./RecordWithdrawl.jsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOCK DATA — später durch API-Calls ersetzen
@@ -149,10 +150,12 @@ const COLORS = {
 
 const css = {
   app: {
-    display: "flex", minHeight: "100vh",
+    display: "flex", height: "100vh", width: "100vw",
+    overflow: "hidden",
     background: COLORS.bg,
     fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
     color: COLORS.text,
+    position: "fixed", top: 0, left: 0,
   },
   sidebar: {
     width: "220px", minWidth: "220px",
@@ -399,20 +402,34 @@ function DashboardView() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EINZAHLUNG VIEW — rendert AddDeposit, schreibt in localStorage
+// TRANSAKTIONS VIEW — rendert AddDeposit und RecordWithdrawal, schreibt in localStorage
 // ─────────────────────────────────────────────────────────────────────────────
 
-function EinzahlungView({ onNavigate }) {
-  function handleSuccess(newEvent) {
-    const updated = [newEvent, ...loadEvents()];
+function TransaktionenView({ onNavigate }) {
+  function handle_deposit_success(new_event) {
+    const updated = [new_event, ...loadEvents()];
     saveEvents(updated);
-    // Nach Erfolg automatisch zur History navigieren
     setTimeout(() => onNavigate("history"), 1600);
   }
 
+  function handle_withdrawal_success(new_event) {
+    const updated = [new_event, ...loadEvents()];
+    saveEvents(updated);
+    setTimeout(() => onNavigate("history"), 1600);
+  }
+
+  const events = loadEvents();
+  const current_bankroll = events.reduce(
+    (s, e) => e.type === "deposit" ? s + e.amount : s - e.amount, 0
+  );
+
   return (
-    <div style={{ maxWidth: "480px" }}>
-      <AddDeposit onSuccess={handleSuccess} />
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", maxWidth: "960px" }}>
+      <AddDeposit onSuccess={handle_deposit_success} />
+      <RecordWithdrawal
+        currentBankroll={current_bankroll}
+        onSuccess={handle_withdrawal_success}
+      />
     </div>
   );
 }
@@ -615,19 +632,19 @@ function StatsView() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const VIEWS = [
-  { id: "dashboard",  label: "Dashboard",  Icon: Icon.Dashboard },
-  { id: "einzahlung", label: "Einzahlung", Icon: Icon.Plus      },
-  { id: "history",    label: "History",    Icon: Icon.History   },
-  { id: "sessions",   label: "Sessions",   Icon: Icon.Sessions  },
-  { id: "stats",      label: "Statistiken",Icon: Icon.Stats     },
+  { id: "dashboard",     label: "Dashboard",    Icon: Icon.Dashboard },
+  { id: "transaktionen", label: "Transaktionen",Icon: Icon.Bankroll  },
+  { id: "history",       label: "History",      Icon: Icon.History   },
+  { id: "sessions",      label: "Sessions",     Icon: Icon.Sessions  },
+  { id: "stats",         label: "Statistiken",  Icon: Icon.Stats     },
 ];
 
 const VIEW_META = {
-  dashboard:  { title: "Dashboard",    sub: "Übersicht deiner Bankroll & Performance" },
-  einzahlung: { title: "Einzahlung",   sub: "Geld zur Bankroll hinzufügen"            },
-  history:    { title: "History",      sub: "Alle Einzahlungen & Auszahlungen"        },
-  sessions:   { title: "Sessions",     sub: "Cashgame & Turniere erfassen"            },
-  stats:      { title: "Statistiken",  sub: "Analyse deiner Poker-Performance"        },
+  dashboard:     { title: "Dashboard",     sub: "Übersicht deiner Bankroll & Performance"  },
+  transaktionen: { title: "Transaktionen", sub: "Einzahlungen & Auszahlungen erfassen"     },
+  history:       { title: "History",       sub: "Alle Einzahlungen & Auszahlungen"         },
+  sessions:      { title: "Sessions",      sub: "Cashgame & Turniere erfassen"             },
+  stats:         { title: "Statistiken",   sub: "Analyse deiner Poker-Performance"         },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -638,14 +655,14 @@ export default function PokerBankrollManager() {
   const [activeView, setActiveView] = useState("dashboard");
 
   const renderView = () => {
-    switch (activeView) {
-      case "dashboard":  return <DashboardView />;
-      case "einzahlung": return <EinzahlungView onNavigate={setActiveView} />;
-      case "history":    return <HistoryView />;
-      case "sessions":   return <SessionsView />;
-      case "stats":      return <StatsView />;
-      default:           return <DashboardView />;
-    }
+  switch (activeView) {
+    case "dashboard":     return <DashboardView />;
+    case "transaktionen": return <TransaktionenView onNavigate={setActiveView} />;
+    case "history":       return <HistoryView />;
+    case "sessions":      return <SessionsView />;
+    case "stats":         return <StatsView />;
+    default:              return <DashboardView />;
+  }
   };
 
   const meta = VIEW_META[activeView];
