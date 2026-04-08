@@ -1,8 +1,12 @@
-import sqlalchemy
-from sqlalchemy.orm import Session, Integer, String
+from sqlalchemy import Column, Integer, String
+from sqlalchemy.orm import relationship
+from .base import Base
 
-class Platforms(Base):
+
+class Platform(Base):
     __tablename__ = "platforms"
-    
-    id = Column(Integer, primary_key=True)
-    name = Column(String(100))
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), unique=True, nullable=False)
+
+    sessions = relationship("Session", back_populates="platform")
