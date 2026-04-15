@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .app.db.init_db import init_db
+from backend.app.api.withdrawal_api import router as withdrawal_router
+
 
 # Initialize database
 try:
@@ -14,6 +16,8 @@ app = FastAPI(
     description="API for managing poker bankroll, sessions, and statistics",
     version="1.0.0"
 )
+
+app.include_router(withdrawal_router)
 
 # Add CORS middleware
 app.add_middleware(

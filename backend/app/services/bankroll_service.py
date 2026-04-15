@@ -1,4 +1,4 @@
-from app.crud.withdrawal_crud import db_withdrawals
+from backend.app.crud.withdrawal_crud import db_withdrawals
 
 def get_current_bankroll():
     base_bankroll = 1000  # jetzt Startwert (später aus DB berechnen)

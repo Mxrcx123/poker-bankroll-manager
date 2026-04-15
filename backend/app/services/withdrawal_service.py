@@ -1,11 +1,11 @@
-from app.crud.withdrawal_crud import (
+from backend.app.crud.withdrawal_crud import (
     create_withdrawal,
     get_all_withdrawals,
     get_withdrawal,
     update_withdrawal,
     delete_withdrawal
 )
-from app.services.bankroll_service import get_current_bankroll
+from backend.app.services.bankroll_service import get_current_bankroll
 
 
 def create(data):

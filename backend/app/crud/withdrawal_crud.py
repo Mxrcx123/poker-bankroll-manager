@@ -1,4 +1,4 @@
-from app.model.withdrawal import Withdrawal
+from backend.app.model.withdrawal import Withdrawal
 from uuid import uuid4
 from datetime import datetime
 
