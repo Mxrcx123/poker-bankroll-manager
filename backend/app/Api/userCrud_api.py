@@ -5,11 +5,6 @@ from backend.app.crud.userCrud import UserCrud
 
 app = FastAPI()
 
-@app.get("/")
-# This endpoint checks if the backend connection is working by returning a simple message.
-async def root():
-    return {"message": "Backend connection Works"}
-
 @app.post("user/{db_session}/{user_name}/{user_password}")
 # This endpoint creates a new user in a database with a name and password.
 async def create_user(db_session: Session, user_name, user_password):
