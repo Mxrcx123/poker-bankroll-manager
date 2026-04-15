@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from app.schema.withdrawal_schema import WithdrawalCreate, WithdrawalUpdate
+from backend.app.schema.withdrawal_schema import WithdrawalCreate, WithdrawalUpdate
 from app.services import withdrawal_service
 
 router = APIRouter(prefix="/withdrawals", tags=["Withdrawals"])
