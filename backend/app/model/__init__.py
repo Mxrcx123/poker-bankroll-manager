@@ -2,7 +2,7 @@ from .base import Base
 from .user import User
 from .platforms import Platform
 from .game_mode import GameMode
-from .session import Session
+from .Session import Session
 from .cash_session import CashSession
 from .tournament import Tournament
 from .bankroll_events import BankrollEvent
