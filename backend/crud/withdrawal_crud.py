@@ -13,8 +13,8 @@ def create_withdrawal(data):
         currency=data.currency,
         date=data.date,
         note=data.note,
-        created_at=datetime.utc(),
-        updated_at=datetime.utc()
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
     )
     db_withdrawals[str(withdrawal.id)] = withdrawal
     return withdrawal
