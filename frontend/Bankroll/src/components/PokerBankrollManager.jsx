@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import AddDeposit from "./AddDeposit.jsx";
 import RecordWithdrawal from "./RecordWithdrawl.jsx";
+import CreateSession from "./CreateSession.jsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOCK DATA — später durch API-Calls ersetzen
@@ -59,6 +60,19 @@ function loadEvents() {
 
 function saveEvents(events) {
   localStorage.setItem("bankroll_events", JSON.stringify(events));
+}
+
+function loadSessions() {
+  try {
+    const raw = localStorage.getItem("bankroll_sessions");
+    return raw ? JSON.parse(raw) : MOCK_SESSIONS;
+  } catch {
+    return MOCK_SESSIONS;
+  }
+}
+
+function saveSessions(sessions) {
+  localStorage.setItem("bankroll_sessions", JSON.stringify(sessions));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -513,29 +527,28 @@ function HistoryView() {
 }
 
 function SessionsView() {
+  const [sessions, setSessions] = useState(loadSessions());
+  const [showCreateForm, setShowCreateForm] = useState(false);
+
+  const handleAddSession = (newSession) => {
+    const updated = [newSession, ...sessions];
+    setSessions(updated);
+    saveSessions(updated);
+    setShowCreateForm(false);
+  };
+
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px" }}>
-        <div style={css.card}>
-          <div style={css.cardLabel}>Cashgame Session</div>
-          {["Plattform", "Buy-in (€)", "Cash-out (€)"].map((ph, i) => (
-            <input key={i} placeholder={ph} style={{ width: "100%", padding: "10px 12px", background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: "8px", color: COLORS.text, fontSize: "14px", marginBottom: "10px", boxSizing: "border-box" }} />
-          ))}
-          <textarea placeholder="Notizen..." rows={2} style={{ width: "100%", padding: "10px 12px", background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: "8px", color: COLORS.text, fontSize: "14px", marginBottom: "12px", resize: "none", boxSizing: "border-box" }} />
-          <button style={{ ...css.btnPrimary, width: "100%", justifyContent: "center" }}>
-            <Icon.Plus /> Session speichern
+      <div style={{ marginBottom: "20px" }}>
+        {!showCreateForm ? (
+          <button onClick={() => setShowCreateForm(true)} style={{ ...css.btnPrimary, padding: "12px 20px" }}>
+            <Icon.Plus /> Neue Session erfassen
           </button>
-        </div>
-        <div style={css.card}>
-          <div style={css.cardLabel}>Turnier Session</div>
-          {["Plattform", "Buy-in (€)", "Fee (€)", "Rebuys gesamt (€)", "Gewinn (€)"].map((ph, i) => (
-            <input key={i} placeholder={ph} style={{ width: "100%", padding: "10px 12px", background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: "8px", color: COLORS.text, fontSize: "14px", marginBottom: "8px", boxSizing: "border-box" }} />
-          ))}
-          <button style={{ ...css.btnPrimary, width: "100%", justifyContent: "center", marginTop: "4px" }}>
-            <Icon.Plus /> Turnier speichern
-          </button>
-        </div>
+        ) : (
+          <CreateSession onSuccess={handleAddSession} onCancel={() => setShowCreateForm(false)} />
+        )}
       </div>
+
       <div style={css.card}>
         <div style={css.sectionTitle}><span>Alle Sessions</span></div>
         <div style={{ ...css.tableRow, borderBottom: `1px solid ${COLORS.borderLight}`, paddingBottom: "6px" }}>
@@ -543,7 +556,7 @@ function SessionsView() {
             <div key={i} style={{ fontSize: "10px", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, fontWeight: "600" }}>{h}</div>
           ))}
         </div>
-        {MOCK_SESSIONS.map((s) => (
+        {sessions.map((s) => (
           <div key={s.id} style={css.tableRow}>
             <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{s.date}</div>
             <div><span style={css.tag(s.game_mode === "cashgame" ? "green" : "gold")}>{s.game_mode === "cashgame" ? "Cash" : "Turnier"}</span></div>
@@ -707,9 +720,6 @@ export default function PokerBankrollManager() {
             <div style={css.pageSubtitle}>{meta.sub}</div>
           </div>
           <div style={{ display: "flex", gap: "10px" }}>
-            {activeView === "sessions" && (
-              <button style={css.btnPrimary}><Icon.Plus /> Neue Session</button>
-            )}
             {activeView === "stats" && (
               <button style={css.btnSecondary}><Icon.Export /> Report exportieren</button>
             )}
