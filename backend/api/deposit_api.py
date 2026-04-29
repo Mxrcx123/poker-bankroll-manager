@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 
-from backend.schema.deposit_schema import DepositCreate, DepositResponse
+from schema.deposit_schema import DepositCreate, DepositResponse
 
 router = APIRouter(prefix="/deposits", tags=["deposits"])
 
