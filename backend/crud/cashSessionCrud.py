@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from model.cash_session import CashSession
+from backend.model.cash_session import CashSession
 
 
 class CashSessionCrud():

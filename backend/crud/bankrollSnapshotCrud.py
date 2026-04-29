@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from model.bankroll_snapshot import BankrollSnapshot
+from backend.model.bankroll_snapshot import BankrollSnapshot
 
 
 class BankrollSnapshotCrud():

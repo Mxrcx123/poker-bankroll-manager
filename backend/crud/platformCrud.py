@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from model.platforms import Platform
+from backend.model.platforms import Platform
 
 
 class PlatformCrud():

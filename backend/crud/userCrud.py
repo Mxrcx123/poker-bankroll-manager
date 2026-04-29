@@ -1,6 +1,6 @@
 import hashlib
 from sqlalchemy.orm import Session
-from model.user import User
+from backend.model.user import User
 
 
 class UserCrud():

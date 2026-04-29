@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from model.game_mode import GameMode
+from backend.model.game_mode import GameMode
 
 
 class GameModeCrud():

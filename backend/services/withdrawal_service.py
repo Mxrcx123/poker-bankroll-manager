@@ -1,4 +1,4 @@
-from crud.withdrawal_crud import (
+from backend.crud.withdrawal_crud import (
     create_withdrawal,
     get_all_withdrawals,
     get_withdrawal,
@@ -6,18 +6,26 @@ from crud.withdrawal_crud import (
     delete_withdrawal
 )
 
-from services.bankroll_service import get_current_bankroll
+from backend.services.bankroll_service import get_current_bankroll
 
-def create(data):
+
+def create(db, user_id, data):
     if data.amount <= 0:
         raise ValueError("Amount must be greater than 0")
 
-    bankroll = get_current_bankroll()
+    bankroll = get_current_bankroll(db, user_id)
 
     if data.amount > bankroll:
         raise ValueError("Not enough bankroll")
 
-    return create_withdrawal(data)
+    withdrawal_amount = -data.amount
+
+    return create_withdrawal(
+        db=db,
+        user_id=user_id,
+        amount=withdrawal_amount,
+        event_type="WITHDRAWAL"
+    )
 
 
 def get_all():
