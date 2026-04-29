@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .app.db.init_db import init_db
+from db.init_db import init_db
 
 # Initialize database
 try:
