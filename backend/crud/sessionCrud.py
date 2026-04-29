@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session as DBSession
-from ..model.session import Session
+from model.session import Session
 
 
 class SessionCrud():

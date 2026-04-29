@@ -1,20 +1,12 @@
-<<<<<<<< HEAD:backend/app/services/withdrawal_service.py
-from backend.app.crud.withdrawal_crud import (
-========
 from crud.withdrawal_crud import (
->>>>>>>> main:backend/services/withdrawal_service.py
     create_withdrawal,
     get_all_withdrawals,
     get_withdrawal,
     update_withdrawal,
     delete_withdrawal
 )
-<<<<<<<< HEAD:backend/app/services/withdrawal_service.py
-from backend.app.services.bankroll_service import get_current_bankroll
-========
-from services.bankroll_service import get_current_bankroll
->>>>>>>> main:backend/services/withdrawal_service.py
 
+from services.bankroll_service import get_current_bankroll
 
 def create(data):
     if data.amount <= 0:

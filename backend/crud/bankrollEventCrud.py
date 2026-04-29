@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from ..model.bankroll_events import BankrollEvent
+from model.bankroll_events import BankrollEvent
 
 
 class BankrollEventCrud():

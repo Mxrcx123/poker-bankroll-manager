@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from ..model.tournament import Tournament
+from model.tournament import Tournament
 
 
 class TournamentCrud():
