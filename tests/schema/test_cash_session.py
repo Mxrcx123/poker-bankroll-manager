@@ -12,3 +12,17 @@ def test_cash_session_schemas_validate_and_serialize(cash_session):
     assert update_schema.cash_out == Decimal("150.00")
     assert response_schema.id == cash_session.id
     assert response_schema.cash_out == Decimal("150.00")
+
+
+def test_cash_session_create_allows_missing_cash_out():
+    create_schema = CashSessionCreate(session_id=1, buy_in="100.00")
+
+    assert create_schema.buy_in == Decimal("100.00")
+    assert create_schema.cash_out is None
+
+
+def test_cash_session_update_can_record_only_cash_out():
+    update_schema = CashSessionUpdate(cash_out="175.50")
+
+    assert update_schema.buy_in is None
+    assert update_schema.cash_out == Decimal("175.50")
