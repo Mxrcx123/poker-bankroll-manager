@@ -1,4 +1,4 @@
-from backend.crud.withdrawal_crud import (
+from crud.withdrawal_crud import (
     create_withdrawal,
     get_all_withdrawals,
     get_withdrawal,
@@ -6,7 +6,7 @@ from backend.crud.withdrawal_crud import (
     delete_withdrawal
 )
 
-from backend.services.bankroll_service import get_current_bankroll
+from services.bankroll_service import get_current_bankroll
 
 
 def create(db, user_id, data):

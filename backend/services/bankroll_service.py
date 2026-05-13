@@ -1,4 +1,4 @@
-from backend.crud.withdrawal_crud import db_withdrawals
+from crud.withdrawal_crud import db_withdrawals
 
 
 def get_current_bankroll(db, user_id):
