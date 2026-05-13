@@ -22,6 +22,11 @@ class BankrollEventCreate(BaseModel):
         }
 
 
+# User Story 4: Edit Bankroll Event
+# Zugewiesene Person: Katharina Almer
+# Autor des Codes: Stafan Derler 
+# Anmerkungen: Die Funktionen waren bereits vorhanden, ich habe nur kleinere Anpassungen gemacht 
+
 class BankrollEventUpdate(BaseModel):
     """Schema for updating a bankroll event"""
     amount: Optional[Decimal] = Field(None, decimal_places=2, description="Transaction amount")

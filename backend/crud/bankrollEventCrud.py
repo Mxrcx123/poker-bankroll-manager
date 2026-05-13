@@ -28,8 +28,14 @@ class BankrollEventCrud():
     def get_bankroll_events_by_type(db: Session, event_type: str):
         return db.query(BankrollEvent).filter(BankrollEvent.event_type == event_type).all()
 
+
+    # User Story 4: Edit Bankroll Event
+    # Zugewiesene Person: Katharina Almer
+    # Autor des Codes: Stafan Derler 
+    # Anmerkungen: Die Funktionen waren bereits vorhanden, ich habe nur kleinere Anpassungen gemacht 
+
     @staticmethod
-    def update_bankroll_event(db: Session, event_id: int, amount: float = None, 
+    def update_bankroll_event(db: Session, event_id: int, amount: float = None,           
                               event_type: str = None, notes: str = None):
         event = db.query(BankrollEvent).filter(BankrollEvent.id == event_id).first()
         if not event:
@@ -43,6 +49,12 @@ class BankrollEventCrud():
         db.commit()
         db.refresh(event)
         return event
+
+    # User Story 5: Delete Bankroll Event
+    # Zugewiesene Person: Katharina Almer
+    # Autor des Codes: Stafan Derler 
+    # Anmerkungen: Die Funktionen waren bereits vorhanden, ich habe nur kleinere Anpassungen gemacht 
+
 
     @staticmethod
     def delete_bankroll_event(db: Session, event_id: int):

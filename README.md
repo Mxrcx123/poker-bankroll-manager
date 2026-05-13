@@ -180,3 +180,10 @@ Am Ende des Projekts steht:
 - Poker Bankroll Manager ist der **klare Kern** des Projekts
 - Blackjack Strategy Trainer ist ein **sauber abgegrenzter Bonus**
 - Erweiterbarkeit und Softwarequalität stehen im Vordergrund
+
+
+# Startanweisungen für Backend und Frontend
+Backend: uvicorn main:app --host 0.0.0.0 --port 8000
+
+Frontend: npm run dev       
+(zuerst npm install, um zu sehen, ob alle Packages up to date sind, da es sonst zu Problemen wegen einer falschen Version kommen kann)

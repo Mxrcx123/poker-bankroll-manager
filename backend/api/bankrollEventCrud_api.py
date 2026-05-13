@@ -54,6 +54,12 @@ async def get_bankroll_events_by_type(db_session: Session, event_type: str):
     except Exception as e:
         return {"error": str(e)}
 
+
+# User Story 4: Edit Bankroll Event
+# Zugewiesene Person: Katharina Almer
+# Autor des Codes: Stafan Derler 
+# Anmerkungen: Die Funktionen waren bereits vorhanden, ich habe nur kleinere Anpassungen gemacht 
+
 @app.put("/bankroll-event/{db_session}/{event_id}")
 # This endpoint updates a bankroll event based on its id.
 async def update_bankroll_event(db_session: Session, event_id: int, amount: float = None, event_type: str = None, notes: str = None):
@@ -62,6 +68,13 @@ async def update_bankroll_event(db_session: Session, event_id: int, amount: floa
         return {"message": "successfully updated bankroll event"}
     except Exception as e:
         return {"error": str(e)}
+    
+    
+# User Story 5: Delete Bankroll Event
+# Zugewiesene Person: Katharina Almer
+# Autor des Codes: Stafan Derler 
+# Anmerkungen: Die Funktionen waren bereits vorhanden, ich habe nur kleinere Anpassungen gemacht 
+
 
 @app.delete("/bankroll-event/delete/{db_session}/{event_id}")
 # This endpoint deletes a bankroll event based on its id.
