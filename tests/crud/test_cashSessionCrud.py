@@ -21,3 +21,16 @@ def test_cash_session_crud_lifecycle(db_session, session_record):
 
 def test_cash_session_update_missing_record_returns_none(db_session):
     assert CashSessionCrud.update_cash_session(db_session, 999, buy_in=100) is None
+
+
+def test_update_cash_out_by_session_id_stores_cash_out(db_session, session_record):
+    CashSessionCrud.create_cash_session(db_session, session_record.id, 100)
+
+    updated = CashSessionCrud.update_cash_out_by_session_id(db_session, session_record.id, 145)
+
+    assert updated.cash_out == Decimal("145.00")
+    assert CashSessionCrud.get_cash_session_by_session_id(db_session, session_record.id).cash_out == Decimal("145.00")
+
+
+def test_update_cash_out_by_session_id_missing_record_returns_none(db_session):
+    assert CashSessionCrud.update_cash_out_by_session_id(db_session, 999, 145) is None

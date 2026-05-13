@@ -52,6 +52,23 @@ async def update_cash_session(db_session: Session, cash_session_id: int, buy_in:
     except Exception as e:
         return {"error": str(e)}
 
+@app.put("/cash-session/session/{db_session}/{session_id}/cash-out/{cash_out}")
+# This endpoint records the cash-out value for an existing cash game session.
+async def record_cash_out(db_session: Session, session_id: int, cash_out: float):
+    try:
+        cash_session = CashSessionCrud.update_cash_out_by_session_id(db_session, session_id, cash_out)
+        if cash_session is None:
+            return {"error": "Cash session not found"}
+        return {
+            "message": "successfully recorded cash-out",
+            "id": cash_session.id,
+            "session_id": cash_session.session_id,
+            "buy_in": cash_session.buy_in,
+            "cash_out": cash_session.cash_out
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
 @app.delete("/cash-session/delete/{db_session}/{cash_session_id}")
 # This endpoint deletes a cash session based on its id.
 async def delete_cash_session(db_session: Session, cash_session_id: int):

@@ -37,6 +37,16 @@ class CashSessionCrud():
         return cash_session
 
     @staticmethod
+    def update_cash_out_by_session_id(db: Session, session_id: int, cash_out: float):
+        cash_session = db.query(CashSession).filter(CashSession.session_id == session_id).first()
+        if not cash_session:
+            return None
+        cash_session.cash_out = cash_out
+        db.commit()
+        db.refresh(cash_session)
+        return cash_session
+
+    @staticmethod
     def delete_cash_session(db: Session, cash_session_id: int):
         cash_session = db.query(CashSession).filter(CashSession.id == cash_session_id).first()
         if cash_session:
