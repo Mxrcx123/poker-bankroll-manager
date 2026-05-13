@@ -132,6 +132,12 @@ const Icon = {
       <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
     </svg>
   ),
+  Trash: () => (
+    <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+      <path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+    </svg>
+  ),
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -250,7 +256,7 @@ const css = {
     marginBottom: "12px", display: "flex", alignItems: "center", justifyContent: "space-between",
   },
   tableRow: {
-    display: "grid", gridTemplateColumns: "80px 90px 110px 1fr 80px",
+    display: "grid", gridTemplateColumns: "80px 90px 110px 1fr 80px 36px",
     gap: "8px", padding: "10px 4px",
     borderBottom: `1px solid ${COLORS.border}`,
     alignItems: "center", fontSize: "13px",
@@ -526,9 +532,55 @@ function HistoryView() {
   );
 }
 
+function DeleteConfirmModal({ session, onConfirm, onCancel }) {
+  if (!session) return null;
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 1000,
+      background: "rgba(0,0,0,0.6)", display: "flex",
+      alignItems: "center", justifyContent: "center",
+    }}>
+      <div style={{
+        background: COLORS.card, border: `1px solid ${COLORS.border}`,
+        borderRadius: "14px", padding: "28px 32px", maxWidth: "400px", width: "90%",
+        boxShadow: "0 8px 40px rgba(0,0,0,0.5)",
+      }}>
+        <div style={{ fontSize: "16px", fontWeight: "700", color: COLORS.text, marginBottom: "8px" }}>
+          Session löschen?
+        </div>
+        <div style={{ fontSize: "13px", color: COLORS.textMuted, marginBottom: "20px", lineHeight: 1.6 }}>
+          Die Session vom <strong style={{ color: COLORS.text }}>{session.date}</strong> auf{" "}
+          <strong style={{ color: COLORS.text }}>{session.platform}</strong> (
+          {session.game_mode === "cashgame" ? "Cash" : "Turnier"},{" "}
+          <span style={{ color: session.profit >= 0 ? COLORS.greenText : COLORS.redText, fontWeight: "700" }}>
+            {session.profit >= 0 ? "+" : ""}€{session.profit}
+          </span>
+          ) wird unwiderruflich entfernt.
+        </div>
+        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+          <button onClick={onCancel} style={{ ...css.btnSecondary }}>
+            Abbrechen
+          </button>
+          <button
+            onClick={() => onConfirm(session.id)}
+            style={{
+              ...css.btnPrimary,
+              background: COLORS.red,
+              color: COLORS.white,
+            }}
+          >
+            <Icon.Trash /> Löschen
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SessionsView() {
   const [sessions, setSessions] = useState(loadSessions());
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [sessionToDelete, setSessionToDelete] = useState(null);
 
   const handleAddSession = (newSession) => {
     const updated = [newSession, ...sessions];
@@ -537,8 +589,21 @@ function SessionsView() {
     setShowCreateForm(false);
   };
 
+  const handleDeleteConfirm = (id) => {
+    const updated = sessions.filter((s) => s.id !== id);
+    setSessions(updated);
+    saveSessions(updated);
+    setSessionToDelete(null);
+  };
+
   return (
     <div>
+      <DeleteConfirmModal
+        session={sessionToDelete}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setSessionToDelete(null)}
+      />
+
       <div style={{ marginBottom: "20px" }}>
         {!showCreateForm ? (
           <button onClick={() => setShowCreateForm(true)} style={{ ...css.btnPrimary, padding: "12px 20px" }}>
@@ -552,10 +617,15 @@ function SessionsView() {
       <div style={css.card}>
         <div style={css.sectionTitle}><span>Alle Sessions</span></div>
         <div style={{ ...css.tableRow, borderBottom: `1px solid ${COLORS.borderLight}`, paddingBottom: "6px" }}>
-          {["Datum","Modus","Plattform","Notiz","Profit"].map((h, i) => (
+          {["Datum","Modus","Plattform","Notiz","Profit",""].map((h, i) => (
             <div key={i} style={{ fontSize: "10px", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, fontWeight: "600" }}>{h}</div>
           ))}
         </div>
+        {sessions.length === 0 && (
+          <div style={{ textAlign: "center", padding: "40px", color: COLORS.textDim, fontSize: "14px" }}>
+            Noch keine Sessions vorhanden.
+          </div>
+        )}
         {sessions.map((s) => (
           <div key={s.id} style={css.tableRow}>
             <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{s.date}</div>
@@ -566,6 +636,20 @@ function SessionsView() {
               {s.profit >= 0 ? <Icon.TrendUp /> : <Icon.TrendDown />}
               {s.profit >= 0 ? "+" : ""}€{s.profit}
             </div>
+            <button
+              onClick={() => setSessionToDelete(s)}
+              title="Session löschen"
+              style={{
+                background: "transparent", border: "none", cursor: "pointer",
+                color: COLORS.textDim, display: "flex", alignItems: "center",
+                justifyContent: "center", padding: "4px", borderRadius: "6px",
+                transition: "color 0.15s",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.redText)}
+              onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.textDim)}
+            >
+              <Icon.Trash />
+            </button>
           </div>
         ))}
       </div>
