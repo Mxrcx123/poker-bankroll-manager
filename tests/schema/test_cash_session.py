@@ -1,3 +1,5 @@
+# File Change Auther: "Stefan Derler"
+
 from decimal import Decimal
 
 from schema.cash_session import CashSessionCreate, CashSessionResponse, CashSessionUpdate
@@ -12,8 +14,11 @@ def test_cash_session_schemas_validate_and_serialize(cash_session):
     assert update_schema.cash_out == Decimal("150.00")
     assert response_schema.id == cash_session.id
     assert response_schema.cash_out == Decimal("150.00")
+    # // Story 12
+    assert response_schema.profit_loss is None
 
 
+# // Story 11
 def test_cash_session_create_allows_missing_cash_out():
     create_schema = CashSessionCreate(session_id=1, buy_in="100.00")
 
@@ -21,6 +26,7 @@ def test_cash_session_create_allows_missing_cash_out():
     assert create_schema.cash_out is None
 
 
+# // Story 11
 def test_cash_session_update_can_record_only_cash_out():
     update_schema = CashSessionUpdate(cash_out="175.50")
 

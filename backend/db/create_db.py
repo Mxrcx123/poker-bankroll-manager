@@ -1,3 +1,5 @@
+# File Change Auther: "Stefan Derler"
+
 import sqlite3
 import os
 
@@ -35,7 +37,9 @@ cursor.execute("""CREATE TABLE IF NOT EXISTS cash_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER NOT NULL,
     buy_in REAL NOT NULL,
-    cash_out REAL NOT NULL
+    cash_out REAL NOT NULL,
+    -- // Story 12
+    profit_loss REAL
 )""")
 
 cursor.execute("""CREATE TABLE IF NOT EXISTS tournaments (

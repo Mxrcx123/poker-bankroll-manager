@@ -1,3 +1,5 @@
+# File Change Auther: "Stefan Derler"
+
 from pydantic import BaseModel, Field
 from typing import Optional
 from decimal import Decimal
@@ -7,6 +9,7 @@ class CashSessionCreate(BaseModel):
     """Schema for creating a cash session"""
     session_id: int = Field(..., description="Session ID")
     buy_in: Decimal = Field(..., decimal_places=2, description="Buy-in amount")
+    # // Story 11
     cash_out: Optional[Decimal] = Field(None, decimal_places=2, description="Cash-out amount")
 
     class Config:
@@ -22,6 +25,7 @@ class CashSessionCreate(BaseModel):
 class CashSessionUpdate(BaseModel):
     """Schema for updating a cash session"""
     buy_in: Optional[Decimal] = Field(None, decimal_places=2, description="Buy-in amount")
+    # // Story 11
     cash_out: Optional[Decimal] = Field(None, decimal_places=2, description="Cash-out amount")
 
     class Config:
@@ -39,6 +43,8 @@ class CashSessionResponse(BaseModel):
     session_id: int
     buy_in: Decimal
     cash_out: Optional[Decimal]
+    # // Story 12
+    profit_loss: Optional[Decimal]
 
     class Config:
         from_attributes = True
@@ -47,6 +53,7 @@ class CashSessionResponse(BaseModel):
                 "id": 1,
                 "session_id": 1,
                 "buy_in": "200.00",
-                "cash_out": "450.00"
+                "cash_out": "450.00",
+                "profit_loss": "250.00"
             }
         }

@@ -1,3 +1,5 @@
+# File Change Auther: "Stefan Derler"
+
 from fastapi import FastAPI
 from sqlalchemy.orm import Session
 from crud.cashSessionCrud import CashSessionCrud
@@ -23,7 +25,9 @@ async def get_cash_session_by_id(db_session: Session, cash_session_id: int):
             "id": cash_session.id,
             "session_id": cash_session.session_id,
             "buy_in": cash_session.buy_in,
-            "cash_out": cash_session.cash_out
+            "cash_out": cash_session.cash_out,
+            # // Story 12
+            "profit_loss": cash_session.profit_loss
         }
     except Exception as e:
         return {"error": str(e)}
@@ -38,7 +42,9 @@ async def get_cash_session_by_session_id(db_session: Session, session_id: int):
             "id": cash_session.id,
             "session_id": cash_session.session_id,
             "buy_in": cash_session.buy_in,
-            "cash_out": cash_session.cash_out
+            "cash_out": cash_session.cash_out,
+            # // Story 12
+            "profit_loss": cash_session.profit_loss
         }
     except Exception as e:
         return {"error": str(e)}
@@ -54,6 +60,7 @@ async def update_cash_session(db_session: Session, cash_session_id: int, buy_in:
 
 @app.put("/cash-session/session/{db_session}/{session_id}/cash-out/{cash_out}")
 # This endpoint records the cash-out value for an existing cash game session.
+# // Story 11
 async def record_cash_out(db_session: Session, session_id: int, cash_out: float):
     try:
         cash_session = CashSessionCrud.update_cash_out_by_session_id(db_session, session_id, cash_out)
@@ -64,7 +71,9 @@ async def record_cash_out(db_session: Session, session_id: int, cash_out: float)
             "id": cash_session.id,
             "session_id": cash_session.session_id,
             "buy_in": cash_session.buy_in,
-            "cash_out": cash_session.cash_out
+            "cash_out": cash_session.cash_out,
+            # // Story 12
+            "profit_loss": cash_session.profit_loss
         }
     except Exception as e:
         return {"error": str(e)}

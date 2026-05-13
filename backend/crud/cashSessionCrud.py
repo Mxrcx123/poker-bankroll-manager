@@ -1,3 +1,5 @@
+# File Change Auther: "Stefan Derler"
+
 from sqlalchemy.orm import Session
 from model.cash_session import CashSession
 
@@ -31,12 +33,14 @@ class CashSessionCrud():
         if buy_in is not None:
             cash_session.buy_in = buy_in
         if cash_out is not None:
+            # // Story 11
             cash_session.cash_out = cash_out
         db.commit()
         db.refresh(cash_session)
         return cash_session
 
     @staticmethod
+    # // Story 11
     def update_cash_out_by_session_id(db: Session, session_id: int, cash_out: float):
         cash_session = db.query(CashSession).filter(CashSession.session_id == session_id).first()
         if not cash_session:

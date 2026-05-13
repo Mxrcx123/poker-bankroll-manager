@@ -1,3 +1,5 @@
+# File Change Auther: "Stefan Derler"
+
 from decimal import Decimal
 
 from crud.cashSessionCrud import CashSessionCrud
@@ -23,6 +25,7 @@ def test_cash_session_update_missing_record_returns_none(db_session):
     assert CashSessionCrud.update_cash_session(db_session, 999, buy_in=100) is None
 
 
+# // Story 11
 def test_update_cash_out_by_session_id_stores_cash_out(db_session, session_record):
     CashSessionCrud.create_cash_session(db_session, session_record.id, 100)
 
@@ -32,5 +35,6 @@ def test_update_cash_out_by_session_id_stores_cash_out(db_session, session_recor
     assert CashSessionCrud.get_cash_session_by_session_id(db_session, session_record.id).cash_out == Decimal("145.00")
 
 
+# // Story 11
 def test_update_cash_out_by_session_id_missing_record_returns_none(db_session):
     assert CashSessionCrud.update_cash_out_by_session_id(db_session, 999, 145) is None
