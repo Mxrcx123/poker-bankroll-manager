@@ -4,6 +4,10 @@ from datetime import datetime
 # Decimal type constrained to 2 decimal places
 Money2 = condecimal(decimal_places=2)
 
+# User Story 4: Edit Bankroll Event
+# Zugewiesene Person: Katharina Almer
+# Autor des Codes: Stafan Derler 
+# Anmerkungen: Die Funktionen waren bereits vorhanden, ich habe nur kleinere Anpassungen gemacht (siehe meine letzten Commits)
 
 class BankrollSnapshotCreate(BaseModel):
     """Schema for creating a bankroll snapshot"""
@@ -18,6 +22,10 @@ class BankrollSnapshotCreate(BaseModel):
             }
         }
 
+# User Story 4: Edit Bankroll Event
+# Zugewiesene Person: Katharina Almer
+# Autor des Codes: Stafan Derler 
+# Anmerkungen: Die Funktionen waren bereits vorhanden, ich habe nur kleinere Anpassungen gemacht (siehe meine letzten Commits)
 
 class BankrollSnapshotUpdate(BaseModel):
     """Schema for updating a bankroll snapshot"""
@@ -30,6 +38,10 @@ class BankrollSnapshotUpdate(BaseModel):
             }
         }
 
+# User Story 4: Edit Bankroll Event
+# Zugewiesene Person: Katharina Almer
+# Autor des Codes: Stafan Derler 
+# Anmerkungen: Die Funktionen waren bereits vorhanden, ich habe nur kleinere Anpassungen gemacht (siehe meine letzten Commits)
 
 class BankrollSnapshotResponse(BaseModel):
     """Schema for bankroll snapshot response"""

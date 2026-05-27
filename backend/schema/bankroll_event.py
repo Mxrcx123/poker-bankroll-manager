@@ -6,6 +6,10 @@ from typing import Optional
 # Decimal type constrained to 2 decimal places
 Money2 = condecimal(decimal_places=2)
 
+# User Story 4: Edit Bankroll Event
+# Zugewiesene Person: Katharina Almer
+# Autor des Codes: Stafan Derler 
+# Anmerkungen: Die Funktionen waren bereits vorhanden, ich habe nur kleinere Anpassungen gemacht (siehe meine letzten Commits)
 
 class BankrollEventCreate(BaseModel):
     """Schema for creating a bankroll event"""
@@ -28,7 +32,7 @@ class BankrollEventCreate(BaseModel):
 # User Story 4: Edit Bankroll Event
 # Zugewiesene Person: Katharina Almer
 # Autor des Codes: Stafan Derler 
-# Anmerkungen: Die Funktionen waren bereits vorhanden, ich habe nur kleinere Anpassungen gemacht 
+# Anmerkungen: Die Funktionen waren bereits vorhanden, ich habe nur kleinere Anpassungen gemacht (siehe meine letzten Commits)
 
 class BankrollEventUpdate(BaseModel):
     """Schema for updating a bankroll event"""
@@ -45,6 +49,10 @@ class BankrollEventUpdate(BaseModel):
             }
         }
 
+# User Story 4: Edit Bankroll Event
+# Zugewiesene Person: Katharina Almer
+# Autor des Codes: Stafan Derler 
+# Anmerkungen: Die Funktionen waren bereits vorhanden, ich habe nur kleinere Anpassungen gemacht (siehe meine letzten Commits)
 
 class BankrollEventResponse(BaseModel):
     """Schema for bankroll event response"""

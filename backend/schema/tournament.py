@@ -4,6 +4,10 @@ from typing import Optional
 # Decimal type constrained to 2 decimal places
 Money2 = condecimal(decimal_places=2)
 
+# User Story 4: Edit Bankroll Event
+# Zugewiesene Person: Katharina Almer
+# Autor des Codes: Stafan Derler 
+# Anmerkungen: Die Funktionen waren bereits vorhanden, ich habe nur kleinere Anpassungen gemacht (siehe meine letzten Commits)
 
 class TournamentCreate(BaseModel):
     """Schema for creating a tournament"""
@@ -32,6 +36,10 @@ class TournamentCreate(BaseModel):
             }
         }
 
+# User Story 4: Edit Bankroll Event
+# Zugewiesene Person: Katharina Almer
+# Autor des Codes: Stafan Derler 
+# Anmerkungen: Die Funktionen waren bereits vorhanden, ich habe nur kleinere Anpassungen gemacht (siehe meine letzten Commits)
 
 class TournamentUpdate(BaseModel):
     """Schema for updating a tournament"""
@@ -58,6 +66,10 @@ class TournamentUpdate(BaseModel):
             }
         }
 
+# User Story 4: Edit Bankroll Event
+# Zugewiesene Person: Katharina Almer
+# Autor des Codes: Stafan Derler 
+# Anmerkungen: Die Funktionen waren bereits vorhanden, ich habe nur kleinere Anpassungen gemacht (siehe meine letzten Commits)
 
 class TournamentResponse(BaseModel):
     """Schema for tournament response"""

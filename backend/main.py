@@ -4,6 +4,7 @@ from db.init_db import init_db
 from api import withdrawal_api
 import uvicorn
 
+
 # Bemerkung: Wenn man die Requirements nicht installieren kann, dann folgenden Befehl probieren: py -3.12 -m pip install -r .\backend\requirements.txt
 # Backend starten mit: python .\backend\main.py (aus dem Hauptordner poker-bankroll-manager)
 
@@ -49,3 +50,9 @@ def health_check():
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
+
+# User Story 4: Edit Bankroll Event
+# Zugewiesene Person: Katharina Almer
+# Autor des Codes: Stafan Derler 
+# Anmerkungen: Die Host-URL bzw. IP-Adresse des Hosts geändert (siehe meine letzten Commits). (funktionierte mit 0.0.0.0 nicht, glaube wegen lokaler Ausführung)
+# (Wenn es im Codespace nicht funktioniert, versuch es zurück auf 0.0.0.0 zu ändern)
