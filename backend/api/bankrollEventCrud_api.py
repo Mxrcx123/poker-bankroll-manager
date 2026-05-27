@@ -1,21 +1,22 @@
-from fastapi import FastAPI
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from model.base import get_db
 from crud.bankrollEventCrud import BankrollEventCrud
 
-app = FastAPI()
+router = APIRouter()
 
-@app.post("/bankroll-event/{db_session}/{user_id}/{amount}/{event_type}")
+@router.post("/bankroll-event/{user_id}/{amount}/{event_type}")
 # This endpoint creates a new bankroll event in the database.
-async def create_bankroll_event(db_session: Session, user_id: int, amount: float, event_type: str, notes: str = None):
+async def create_bankroll_event(user_id: int, amount: float, event_type: str, notes: str = None, db_session: Session = Depends(get_db)):
     try:
         BankrollEventCrud.create_bankroll_event(db_session, user_id, amount, event_type, notes)
         return {"message": "Bankroll event created successfully"}
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/bankroll-event/{db_session}/{event_id}")
+@router.get("/bankroll-event/{event_id}")
 # This endpoint returns a bankroll event based on its id.
-async def get_bankroll_event_by_id(db_session: Session, event_id: int):
+async def get_bankroll_event_by_id(event_id: int, db_session: Session = Depends(get_db)):
     try:
         event = BankrollEventCrud.get_bankroll_event_by_id(db_session, event_id)
         return {
@@ -30,9 +31,9 @@ async def get_bankroll_event_by_id(db_session: Session, event_id: int):
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/bankroll-event/user/{db_session}/{user_id}")
+@router.get("/bankroll-event/user/{user_id}")
 # This endpoint returns all bankroll events for a user.
-async def get_bankroll_events_by_user_id(db_session: Session, user_id: int):
+async def get_bankroll_events_by_user_id(user_id: int, db_session: Session = Depends(get_db)):
     try:
         events = BankrollEventCrud.get_bankroll_events_by_user_id(db_session, user_id)
         return {
@@ -42,9 +43,9 @@ async def get_bankroll_events_by_user_id(db_session: Session, user_id: int):
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/bankroll-event/type/{db_session}/{event_type}")
+@router.get("/bankroll-event/type/{event_type}")
 # This endpoint returns all bankroll events of a specific type.
-async def get_bankroll_events_by_type(db_session: Session, event_type: str):
+async def get_bankroll_events_by_type(event_type: str, db_session: Session = Depends(get_db)):
     try:
         events = BankrollEventCrud.get_bankroll_events_by_type(db_session, event_type)
         return {
@@ -54,18 +55,18 @@ async def get_bankroll_events_by_type(db_session: Session, event_type: str):
     except Exception as e:
         return {"error": str(e)}
 
-@app.put("/bankroll-event/{db_session}/{event_id}")
+@router.put("/bankroll-event/{event_id}")
 # This endpoint updates a bankroll event based on its id.
-async def update_bankroll_event(db_session: Session, event_id: int, amount: float = None, event_type: str = None, notes: str = None):
+async def update_bankroll_event(event_id: int, amount: float = None, event_type: str = None, notes: str = None, db_session: Session = Depends(get_db)):
     try:
         BankrollEventCrud.update_bankroll_event(db_session, event_id, amount, event_type, notes)
         return {"message": "successfully updated bankroll event"}
     except Exception as e:
         return {"error": str(e)}
 
-@app.delete("/bankroll-event/delete/{db_session}/{event_id}")
+@router.delete("/bankroll-event/delete/{event_id}")
 # This endpoint deletes a bankroll event based on its id.
-async def delete_bankroll_event(db_session: Session, event_id: int):
+async def delete_bankroll_event(event_id: int, db_session: Session = Depends(get_db)):
     try:
         BankrollEventCrud.delete_bankroll_event(db_session, event_id)
         return {"message": "successfully deleted bankroll event"}

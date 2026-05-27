@@ -1,78 +1,151 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import AddDeposit from "./AddDeposit.jsx";
 import RecordWithdrawal from "./RecordWithdrawl.jsx";
 import CreateSession from "./CreateSession.jsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MOCK DATA — später durch API-Calls ersetzen
+// API CONFIG — Basis-URL hier anpassen
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MOCK_BANKROLL = {
-  current: 1340.0,
-  totalDeposits: 1000.0,
-  totalWithdrawals: 200.0,
-  netProfit: 540.0,
+const BASE_URL = "http://localhost:8000"; // <-- hier deine Backend-URL eintragen
+const USER_ID = 1; // <-- aktuell eingeloggter User
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function apiFetch(path, options = {}) {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  return res.json();
+}
+
+// Bankroll Events (Deposits & Withdrawals)
+const api = {
+  // Bankroll Events
+  getBankrollEvents: () => apiFetch(`/bankroll-event/user/db/${USER_ID}`),
+  createDeposit: (amount, notes = "") =>
+    apiFetch(`/deposits/`, {
+      method: "POST",
+      body: JSON.stringify({ amount, notes }),
+    }),
+  createWithdrawal: (amount, notes = "") =>
+    apiFetch(`/withdrawals/`, {
+      method: "POST",
+      body: JSON.stringify({ amount, notes }),
+    }),
+
+  // Sessions
+  getSessions: () => apiFetch(`/session/user/db/${USER_ID}`),
+  createSession: (game_mode_id, platform_id, notes) =>
+    apiFetch(`/session/db/${USER_ID}/${game_mode_id}`, {
+      method: "POST",
+      body: JSON.stringify({ platform_id, notes }),
+    }),
+
+  // Cash sessions
+  getCashSession: (session_id) =>
+    apiFetch(`/cash-session/session/db/${session_id}`),
+
+  // Tournaments
+  getTournament: (session_id) =>
+    apiFetch(`/tournament/session/db/${session_id}`),
+
+  // Platforms
+  getPlatforms: () => apiFetch(`/platform/all/db`),
+
+  // Game Modes
+  getGameModes: () => apiFetch(`/game-mode/all/db`),
+
+  // Bankroll Snapshots
+  getSnapshots: () => apiFetch(`/bankroll-snapshot/user/db/${USER_ID}`),
 };
 
-const MOCK_STATS = {
-  totalSessions: 47,
-  winRate: 61.7,
-  avgProfit: 11.49,
-  bestSession: 320.0,
-  worstSession: -85.0,
-  totalHours: 138,
-};
-
-const MOCK_SESSIONS = [
-  { id: 1, date: "2026-04-07", game_mode: "cashgame",   platform: "PokerStars", buy_in: 50,  cash_out: 118, profit: 68,   notes: "Gutes Spiel, Position gut genutzt" },
-  { id: 2, date: "2026-04-05", game_mode: "tournament", platform: "GGPoker",    buy_in: 22,  fee: 2, rebuys: 0, winnings: 0,  profit: -24, notes: "Bad beat am Bubble" },
-  { id: 3, date: "2026-04-03", game_mode: "cashgame",   platform: "PokerStars", buy_in: 100, cash_out: 240, profit: 140, notes: "" },
-  { id: 4, date: "2026-04-01", game_mode: "tournament", platform: "888poker",   buy_in: 10,  fee: 1, rebuys: 1, winnings: 85, profit: 63,  notes: "3. Platz" },
-  { id: 5, date: "2026-03-29", game_mode: "cashgame",   platform: "PokerStars", buy_in: 50,  cash_out: 35, profit: -15, notes: "" },
-  { id: 6, date: "2026-03-27", game_mode: "cashgame",   platform: "GGPoker",    buy_in: 100, cash_out: 185, profit: 85,  notes: "Nits geblufft" },
-];
-
-const MOCK_BANKROLL_EVENTS = [
-  { id: 1, type: "deposit",    amount: 500, date: "2026-01-10", notes: "" },
-  { id: 2, type: "deposit",    amount: 500, date: "2026-02-15", notes: "" },
-  { id: 3, type: "withdrawal", amount: 200, date: "2026-03-01", notes: "" },
-];
-
-const MOCK_CHART_DATA = [
-  { label: "Jan", value: 500 },
-  { label: "Feb", value: 680 },
-  { label: "Mär", value: 920 },
-  { label: "Apr", value: 1340 },
-];
-
 // ─────────────────────────────────────────────────────────────────────────────
-// LOCALSTORAGE HELPERS — von EinzahlungView und HistoryView genutzt
+// HOOKS
 // ─────────────────────────────────────────────────────────────────────────────
 
-function loadEvents() {
-  try {
-    const raw = localStorage.getItem("bankroll_events");
-    return raw ? JSON.parse(raw) : MOCK_BANKROLL_EVENTS;
-  } catch {
-    return MOCK_BANKROLL_EVENTS;
-  }
+function useBankrollEvents() {
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await api.getBankrollEvents();
+      // API liefert { events: [...] }
+      setEvents(data.events ?? []);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  return { events, loading, error, reload: load };
 }
 
-function saveEvents(events) {
-  localStorage.setItem("bankroll_events", JSON.stringify(events));
+function useSessions() {
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await api.getSessions();
+      // API liefert { sessions: [...] }
+      const raw = data.sessions ?? [];
+
+      // Profit berechnen: für jede Session Cash-Session oder Tournament laden
+      const enriched = await Promise.all(
+        raw.map(async (s) => {
+          try {
+            if (s.game_mode_id === 1) {
+              // Cashgame (game_mode_id 1 = cashgame — ggf. anpassen)
+              const cs = await api.getCashSession(s.id);
+              const profit = (cs.cash_out ?? cs.buy_in) - cs.buy_in;
+              return { ...s, game_mode: "cashgame", buy_in: cs.buy_in, cash_out: cs.cash_out, profit };
+            } else {
+              // Tournament
+              const t = await api.getTournament(s.id);
+              const totalCost = (t.buy_in ?? 0) + (t.fee ?? 0) + (t.rebuys ?? 0) * (t.rebuy_cost ?? 0) + (t.add_ons ?? 0) * (t.add_on_cost ?? 0);
+              const profit = (t.winnings ?? 0) - totalCost;
+              return { ...s, game_mode: "tournament", buy_in: t.buy_in, fee: t.fee, winnings: t.winnings, profit };
+            }
+          } catch {
+            return { ...s, profit: 0 };
+          }
+        })
+      );
+
+      setSessions(enriched);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  return { sessions, loading, error, reload: load };
 }
 
-function loadSessions() {
-  try {
-    const raw = localStorage.getItem("bankroll_sessions");
-    return raw ? JSON.parse(raw) : MOCK_SESSIONS;
-  } catch {
-    return MOCK_SESSIONS;
-  }
-}
+function useSnapshots() {
+  const [snapshots, setSnapshots] = useState([]);
 
-function saveSessions(sessions) {
-  localStorage.setItem("bankroll_sessions", JSON.stringify(sessions));
+  useEffect(() => {
+    api.getSnapshots()
+      .then(data => setSnapshots(data.snapshots ?? []))
+      .catch(() => setSnapshots([]));
+  }, []);
+
+  return snapshots;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -261,6 +334,15 @@ const css = {
     borderBottom: `1px solid ${COLORS.border}`,
     alignItems: "center", fontSize: "13px",
   },
+  loadingText: {
+    textAlign: "center", padding: "40px",
+    color: COLORS.textDim, fontSize: "14px",
+  },
+  errorText: {
+    textAlign: "center", padding: "20px",
+    color: COLORS.redText, fontSize: "13px",
+    background: COLORS.redMuted, borderRadius: "8px", marginBottom: "16px",
+  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -268,6 +350,7 @@ const css = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SparkChart({ data }) {
+  if (!data || data.length < 2) return null;
   const max = Math.max(...data.map((d) => d.value));
   const min = Math.min(...data.map((d) => d.value));
   const range = max - min || 1;
@@ -288,6 +371,11 @@ function SparkChart({ data }) {
 }
 
 function BankrollChart({ data }) {
+  if (!data || data.length < 2) return (
+    <div style={{ textAlign: "center", padding: "40px", color: COLORS.textDim, fontSize: "13px" }}>
+      Noch nicht genug Daten für eine Grafik.
+    </div>
+  );
   const max = Math.max(...data.map((d) => d.value));
   const h = 120, w = 400;
   const pts = data.map((d, i) => ({
@@ -318,10 +406,30 @@ function BankrollChart({ data }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function DashboardView() {
-  // Dashboard liest Balance direkt aus localStorage
-  const events = loadEvents();
-  const balance = events.reduce((s, e) => e.type === "deposit" ? s + e.amount : s - e.amount, 0);
+  const { events, loading, error } = useBankrollEvents();
+  const { sessions, loading: sessLoading } = useSessions();
+  const snapshots = useSnapshots();
+
+  const totalDeposits    = events.filter(e => e.event_type === "deposit").reduce((s, e) => s + e.amount, 0);
+  const totalWithdrawals = events.filter(e => e.event_type === "withdrawal").reduce((s, e) => s + e.amount, 0);
+  const balance = totalDeposits - totalWithdrawals;
   const profitPositive = balance >= 0;
+
+  // Chart-Daten aus Snapshots aufbauen
+  const chartData = snapshots.map(s => ({
+    label: new Date(s.recorded_at).toLocaleDateString("de-AT", { month: "short" }),
+    value: s.amount,
+  }));
+
+  // Session-Stats berechnen
+  const profits = sessions.map(s => s.profit).filter(p => p !== undefined);
+  const winRate = profits.length > 0 ? ((profits.filter(p => p > 0).length / profits.length) * 100).toFixed(1) : "—";
+  const avgProfit = profits.length > 0 ? (profits.reduce((a, b) => a + b, 0) / profits.length).toFixed(2) : 0;
+  const bestSession = profits.length > 0 ? Math.max(...profits) : 0;
+  const worstSession = profits.length > 0 ? Math.min(...profits) : 0;
+
+  if (loading) return <div style={css.loadingText}>Lade Bankroll-Daten…</div>;
+  if (error) return <div style={css.errorText}>Fehler: {error}</div>;
 
   return (
     <div>
@@ -339,13 +447,13 @@ function DashboardView() {
               <span style={{ fontSize: "12px", color: COLORS.textMuted }}>{events.length} Events gesamt</span>
             </div>
           </div>
-          <div style={{ width: "200px" }}><SparkChart data={MOCK_CHART_DATA} /></div>
+          <div style={{ width: "200px" }}><SparkChart data={chartData} /></div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0", marginTop: "20px", borderTop: `1px solid ${COLORS.green}20`, paddingTop: "16px" }}>
           {[
-            { label: "Eingezahlt", value: `€${events.filter(e=>e.type==="deposit").reduce((s,e)=>s+e.amount,0).toFixed(0)}` },
-            { label: "Ausgezahlt", value: `€${events.filter(e=>e.type==="withdrawal").reduce((s,e)=>s+e.amount,0).toFixed(0)}` },
-            { label: "Sessions",   value: MOCK_STATS.totalSessions },
+            { label: "Eingezahlt", value: `€${totalDeposits.toFixed(0)}` },
+            { label: "Ausgezahlt", value: `€${totalWithdrawals.toFixed(0)}` },
+            { label: "Sessions",   value: sessions.length },
           ].map((item, i) => (
             <div key={i} style={{ textAlign: i === 1 ? "center" : i === 2 ? "right" : "left" }}>
               <div style={{ fontSize: "11px", color: COLORS.textDim, letterSpacing: "0.06em", textTransform: "uppercase" }}>{item.label}</div>
@@ -358,10 +466,10 @@ function DashboardView() {
       {/* Stat Cards */}
       <div style={css.grid4}>
         {[
-          { label: "Gewinnrate",       value: `${MOCK_STATS.winRate}%`,                          color: "green" },
-          { label: "Ø Profit/Session", value: `€${MOCK_STATS.avgProfit.toFixed(2)}`,             color: MOCK_STATS.avgProfit >= 0 ? "green" : "red" },
-          { label: "Beste Session",    value: `+€${MOCK_STATS.bestSession}`,                     color: "gold" },
-          { label: "Schlechteste",     value: `€${MOCK_STATS.worstSession}`,                     color: "red" },
+          { label: "Gewinnrate",       value: `${winRate}%`,                                       color: "green" },
+          { label: "Ø Profit/Session", value: `€${avgProfit}`,                                     color: Number(avgProfit) >= 0 ? "green" : "red" },
+          { label: "Beste Session",    value: bestSession > 0 ? `+€${bestSession}` : "—",          color: "gold" },
+          { label: "Schlechteste",     value: worstSession < 0 ? `€${worstSession}` : "—",         color: "red" },
         ].map((item, i) => (
           <div key={i} style={css.statCard}>
             <div style={{ fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.textDim, marginBottom: "6px" }}>{item.label}</div>
@@ -376,19 +484,21 @@ function DashboardView() {
       <div style={css.grid3}>
         <div style={css.card}>
           <div style={css.sectionTitle}><span>Bankroll-Entwicklung</span><span style={{ fontSize: "11px", color: COLORS.textDim, fontWeight: "400", textTransform: "none", letterSpacing: 0 }}>2026</span></div>
-          <BankrollChart data={MOCK_CHART_DATA} />
+          <BankrollChart data={chartData} />
         </div>
         <div style={css.card}>
           <div style={css.sectionTitle}>Letzte Events</div>
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             {events.slice(0, 4).map((ev) => (
               <div key={ev.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: COLORS.surface, borderRadius: "8px", border: `1px solid ${COLORS.border}` }}>
-                <span style={css.tag(ev.type === "deposit" ? "green" : "red")}>{ev.type === "deposit" ? "Einzahlung" : "Auszahlung"}</span>
+                <span style={css.tag(ev.event_type === "deposit" ? "green" : "red")}>{ev.event_type === "deposit" ? "Einzahlung" : "Auszahlung"}</span>
                 <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: "14px", fontWeight: "700", color: ev.type === "deposit" ? COLORS.greenText : COLORS.redText }}>
-                    {ev.type === "deposit" ? "+" : "-"}€{ev.amount.toFixed(2)}
+                  <div style={{ fontSize: "14px", fontWeight: "700", color: ev.event_type === "deposit" ? COLORS.greenText : COLORS.redText }}>
+                    {ev.event_type === "deposit" ? "+" : "-"}€{ev.amount.toFixed(2)}
                   </div>
-                  <div style={{ fontSize: "11px", color: COLORS.textDim }}>{ev.date}</div>
+                  <div style={{ fontSize: "11px", color: COLORS.textDim }}>
+                    {ev.created_at ? new Date(ev.created_at).toLocaleDateString("de-AT") : ""}
+                  </div>
                 </div>
               </div>
             ))}
@@ -399,55 +509,73 @@ function DashboardView() {
       {/* Letzte Sessions */}
       <div style={css.card}>
         <div style={css.sectionTitle}><span>Letzte Sessions</span></div>
-        <div style={{ ...css.tableRow, borderBottom: `1px solid ${COLORS.borderLight}`, paddingBottom: "6px" }}>
-          {["Datum","Modus","Plattform","Notiz","Profit"].map((h, i) => (
-            <div key={i} style={{ fontSize: "10px", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, fontWeight: "600" }}>{h}</div>
-          ))}
-        </div>
-        {MOCK_SESSIONS.slice(0, 5).map((s) => (
-          <div key={s.id} style={css.tableRow}>
-            <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{s.date.slice(5)}</div>
-            <div><span style={css.tag(s.game_mode === "cashgame" ? "green" : "gold")}>{s.game_mode === "cashgame" ? "Cash" : "Turnier"}</span></div>
-            <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{s.platform}</div>
-            <div style={{ fontSize: "12px", color: COLORS.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.notes || "—"}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: "4px", ...css.profit(s.profit) }}>
-              {s.profit >= 0 ? <Icon.TrendUp /> : <Icon.TrendDown />}
-              {s.profit >= 0 ? "+" : ""}€{s.profit}
+        {sessLoading ? (
+          <div style={css.loadingText}>Lade Sessions…</div>
+        ) : (
+          <>
+            <div style={{ ...css.tableRow, borderBottom: `1px solid ${COLORS.borderLight}`, paddingBottom: "6px" }}>
+              {["Datum","Modus","Plattform","Notiz","Profit"].map((h, i) => (
+                <div key={i} style={{ fontSize: "10px", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, fontWeight: "600" }}>{h}</div>
+              ))}
             </div>
-          </div>
-        ))}
+            {sessions.slice(0, 5).map((s) => (
+              <div key={s.id} style={css.tableRow}>
+                <div style={{ fontSize: "12px", color: COLORS.textMuted }}>
+                  {s.started_at ? new Date(s.started_at).toLocaleDateString("de-AT").slice(0, 5) : "—"}
+                </div>
+                <div><span style={css.tag(s.game_mode === "cashgame" ? "green" : "gold")}>{s.game_mode === "cashgame" ? "Cash" : "Turnier"}</span></div>
+                <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{s.platform_id ?? "—"}</div>
+                <div style={{ fontSize: "12px", color: COLORS.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.notes || "—"}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: "4px", ...css.profit(s.profit) }}>
+                  {s.profit >= 0 ? <Icon.TrendUp /> : <Icon.TrendDown />}
+                  {s.profit >= 0 ? "+" : ""}€{s.profit}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
       </div>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TRANSAKTIONS VIEW — rendert AddDeposit und RecordWithdrawal, schreibt in localStorage
+// TRANSAKTIONS VIEW — ruft AddDeposit und RecordWithdrawal auf
+// Nach Erfolg: Reload der Events via onNavigate
 // ─────────────────────────────────────────────────────────────────────────────
 
 function TransaktionenView({ onNavigate }) {
-  function handle_deposit_success(new_event) {
-    const updated = [new_event, ...loadEvents()];
-    saveEvents(updated);
-    setTimeout(() => onNavigate("history"), 1600);
+  const { events, reload } = useBankrollEvents();
+
+  const totalDeposits    = events.filter(e => e.event_type === "deposit").reduce((s, e) => s + e.amount, 0);
+  const totalWithdrawals = events.filter(e => e.event_type === "withdrawal").reduce((s, e) => s + e.amount, 0);
+  const currentBankroll  = totalDeposits - totalWithdrawals;
+
+  async function handle_deposit_success(formData) {
+    try {
+      await api.createDeposit(formData.amount, formData.notes ?? "");
+      await reload();
+      setTimeout(() => onNavigate("history"), 1600);
+    } catch (e) {
+      console.error("Deposit fehlgeschlagen:", e);
+    }
   }
 
-  function handle_withdrawal_success(new_event) {
-    const updated = [new_event, ...loadEvents()];
-    saveEvents(updated);
-    setTimeout(() => onNavigate("history"), 1600);
+  async function handle_withdrawal_success(formData) {
+    try {
+      await api.createWithdrawal(formData.amount, formData.notes ?? "");
+      await reload();
+      setTimeout(() => onNavigate("history"), 1600);
+    } catch (e) {
+      console.error("Withdrawal fehlgeschlagen:", e);
+    }
   }
-
-  const events = loadEvents();
-  const current_bankroll = events.reduce(
-    (s, e) => e.type === "deposit" ? s + e.amount : s - e.amount, 0
-  );
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", maxWidth: "960px" }}>
       <AddDeposit onSuccess={handle_deposit_success} />
       <RecordWithdrawal
-        currentBankroll={current_bankroll}
+        currentBankroll={currentBankroll}
         onSuccess={handle_withdrawal_success}
       />
     </div>
@@ -455,23 +583,22 @@ function TransaktionenView({ onNavigate }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HISTORY VIEW — liest aus localStorage, zeigt Balance + alle Events
+// HISTORY VIEW — holt Bankroll-Events direkt von der API
 // ─────────────────────────────────────────────────────────────────────────────
 
 function HistoryView() {
-  const [events, setEvents] = useState(() => loadEvents());
+  const { events, loading, error } = useBankrollEvents();
 
-  // Beim Mounten immer frisch aus localStorage laden
-  useEffect(() => {
-    setEvents(loadEvents());
-  }, []);
-
-  const totalDeposits    = events.filter(e => e.type === "deposit").reduce((s, e) => s + e.amount, 0);
-  const totalWithdrawals = events.filter(e => e.type === "withdrawal").reduce((s, e) => s + e.amount, 0);
+  const totalDeposits    = events.filter(e => e.event_type === "deposit").reduce((s, e) => s + e.amount, 0);
+  const totalWithdrawals = events.filter(e => e.event_type === "withdrawal").reduce((s, e) => s + e.amount, 0);
   const balance          = totalDeposits - totalWithdrawals;
+
+  if (loading) return <div style={css.loadingText}>Lade Transaktionshistorie…</div>;
 
   return (
     <div>
+      {error && <div style={css.errorText}>Fehler beim Laden: {error}</div>}
+
       {/* Balance-Karten */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px", marginBottom: "20px" }}>
         {[
@@ -506,24 +633,26 @@ function HistoryView() {
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
               <div style={{
                 width: "38px", height: "38px", borderRadius: "50%", flexShrink: 0,
-                background: ev.type === "deposit" ? COLORS.greenMuted : COLORS.redMuted,
+                background: ev.event_type === "deposit" ? COLORS.greenMuted : COLORS.redMuted,
                 display: "flex", alignItems: "center", justifyContent: "center",
-                color: ev.type === "deposit" ? COLORS.greenText : COLORS.redText, fontSize: "16px",
+                color: ev.event_type === "deposit" ? COLORS.greenText : COLORS.redText, fontSize: "16px",
               }}>
-                {ev.type === "deposit" ? "↑" : "↓"}
+                {ev.event_type === "deposit" ? "↑" : "↓"}
               </div>
               <div>
                 <div style={{ fontSize: "14px", fontWeight: "600", color: COLORS.text }}>
-                  {ev.type === "deposit" ? "Einzahlung" : "Auszahlung"}
+                  {ev.event_type === "deposit" ? "Einzahlung" : "Auszahlung"}
                 </div>
-                <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{ev.date}</div>
+                <div style={{ fontSize: "12px", color: COLORS.textMuted }}>
+                  {ev.created_at ? new Date(ev.created_at).toLocaleDateString("de-AT") : ""}
+                </div>
                 {ev.notes && (
                   <div style={{ fontSize: "12px", color: COLORS.textDim, marginTop: "2px" }}>{ev.notes}</div>
                 )}
               </div>
             </div>
-            <div style={{ fontSize: "18px", fontWeight: "800", color: ev.type === "deposit" ? COLORS.greenText : COLORS.redText }}>
-              {ev.type === "deposit" ? "+" : "-"}€{ev.amount.toFixed(2)}
+            <div style={{ fontSize: "18px", fontWeight: "800", color: ev.event_type === "deposit" ? COLORS.greenText : COLORS.redText }}>
+              {ev.event_type === "deposit" ? "+" : "-"}€{ev.amount.toFixed(2)}
             </div>
           </div>
         ))}
@@ -578,15 +707,22 @@ function DeleteConfirmModal({ session, onConfirm, onCancel }) {
 }
 
 function SessionsView() {
-  const [sessions, setSessions] = useState(loadSessions());
+  const { sessions, loading, error, reload } = useSessions();
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState(null);
 
-  const handleAddSession = (newSession) => {
-    const updated = [newSession, ...sessions];
-    setSessions(updated);
-    saveSessions(updated);
-    setShowCreateForm(false);
+  const handleAddSession = async (newSession) => {
+    try {
+      await api.createSession(
+        newSession.game_mode_id,
+        newSession.platform_id,
+        newSession.notes
+      );
+      await reload();
+      setShowCreateForm(false);
+    } catch (e) {
+      console.error("Session erstellen fehlgeschlagen:", e);
+    }
   };
 
   const handleDeleteConfirm = (id) => {
@@ -616,61 +752,88 @@ function SessionsView() {
 
       <div style={css.card}>
         <div style={css.sectionTitle}><span>Alle Sessions</span></div>
-        <div style={{ ...css.tableRow, borderBottom: `1px solid ${COLORS.borderLight}`, paddingBottom: "6px" }}>
-          {["Datum","Modus","Plattform","Notiz","Profit",""].map((h, i) => (
-            <div key={i} style={{ fontSize: "10px", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, fontWeight: "600" }}>{h}</div>
-          ))}
-        </div>
-        {sessions.length === 0 && (
-          <div style={{ textAlign: "center", padding: "40px", color: COLORS.textDim, fontSize: "14px" }}>
-            Noch keine Sessions vorhanden.
-          </div>
-        )}
-        {sessions.map((s) => (
-          <div key={s.id} style={css.tableRow}>
-            <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{s.date}</div>
-            <div><span style={css.tag(s.game_mode === "cashgame" ? "green" : "gold")}>{s.game_mode === "cashgame" ? "Cash" : "Turnier"}</span></div>
-            <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{s.platform}</div>
-            <div style={{ fontSize: "12px", color: COLORS.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.notes || "—"}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: "4px", ...css.profit(s.profit) }}>
-              {s.profit >= 0 ? <Icon.TrendUp /> : <Icon.TrendDown />}
-              {s.profit >= 0 ? "+" : ""}€{s.profit}
+
+        {loading && <div style={css.loadingText}>Lade Sessions…</div>}
+        {error && <div style={css.errorText}>Fehler: {error}</div>}
+
+        {!loading && !error && (
+          <>
+            <div style={{ ...css.tableRow, borderBottom: `1px solid ${COLORS.borderLight}`, paddingBottom: "6px" }}>
+              {["Datum","Modus","Plattform","Notiz","Profit"].map((h, i) => (
+                <div key={i} style={{ fontSize: "10px", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, fontWeight: "600" }}>{h}</div>
+              ))}
             </div>
-            <button
-              onClick={() => setSessionToDelete(s)}
-              title="Session löschen"
-              style={{
-                background: "transparent", border: "none", cursor: "pointer",
-                color: COLORS.textDim, display: "flex", alignItems: "center",
-                justifyContent: "center", padding: "4px", borderRadius: "6px",
-                transition: "color 0.15s",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = COLORS.redText)}
-              onMouseLeave={(e) => (e.currentTarget.style.color = COLORS.textDim)}
-            >
-              <Icon.Trash />
-            </button>
-          </div>
-        ))}
+            {sessions.length === 0 && (
+              <div style={{ textAlign: "center", padding: "30px", color: COLORS.textDim, fontSize: "14px" }}>
+                Noch keine Sessions. Erstelle deine erste Session!
+              </div>
+            )}
+            {sessions.map((s) => (
+              <div key={s.id} style={css.tableRow}>
+                <div style={{ fontSize: "12px", color: COLORS.textMuted }}>
+                  {s.started_at ? new Date(s.started_at).toLocaleDateString("de-AT") : "—"}
+                </div>
+                <div><span style={css.tag(s.game_mode === "cashgame" ? "green" : "gold")}>{s.game_mode === "cashgame" ? "Cash" : "Turnier"}</span></div>
+                <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{s.platform_id ?? "—"}</div>
+                <div style={{ fontSize: "12px", color: COLORS.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.notes || "—"}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: "4px", ...css.profit(s.profit) }}>
+                  {s.profit >= 0 ? <Icon.TrendUp /> : <Icon.TrendDown />}
+                  {s.profit >= 0 ? "+" : ""}€{s.profit}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
       </div>
     </div>
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// STATS VIEW — alle Daten live von der API
+// ─────────────────────────────────────────────────────────────────────────────
+
 function StatsView() {
-  const events = loadEvents();
-  const totalDeposits = events.filter(e => e.type === "deposit").reduce((s, e) => s + e.amount, 0);
-  const totalWithdrawals = events.filter(e => e.type === "withdrawal").reduce((s, e) => s + e.amount, 0);
-  const balance = totalDeposits - totalWithdrawals;
+  const { events } = useBankrollEvents();
+  const { sessions } = useSessions();
+  const snapshots = useSnapshots();
+
+  const totalDeposits    = events.filter(e => e.event_type === "deposit").reduce((s, e) => s + e.amount, 0);
+  const totalWithdrawals = events.filter(e => e.event_type === "withdrawal").reduce((s, e) => s + e.amount, 0);
+  const balance          = totalDeposits - totalWithdrawals;
+
+  const profits  = sessions.map(s => s.profit).filter(p => p !== undefined);
+  const winRate  = profits.length > 0 ? ((profits.filter(p => p > 0).length / profits.length) * 100).toFixed(1) : "—";
+
+  // Chart-Daten aus Snapshots
+  const chartData = snapshots.map(s => ({
+    label: new Date(s.recorded_at).toLocaleDateString("de-AT", { month: "short" }),
+    value: s.amount,
+  }));
+
+  // Sessions nach Modus
+  const cashSessions   = sessions.filter(s => s.game_mode === "cashgame");
+  const tournSessions  = sessions.filter(s => s.game_mode === "tournament");
+  const total          = sessions.length || 1;
+
+  // Sessions nach Monat (letzten 4 Monate)
+  const monthCounts = {};
+  sessions.forEach(s => {
+    if (!s.started_at) return;
+    const key = new Date(s.started_at).toLocaleDateString("de-AT", { month: "long", year: "numeric" });
+    monthCounts[key] = (monthCounts[key] || 0) + 1;
+  });
+  const monthEntries = Object.entries(monthCounts).slice(-4);
+  const maxMonth = Math.max(...monthEntries.map(([,v]) => v), 1);
 
   return (
     <div>
       <div style={css.grid4}>
         {[
-          { label: "Gesamt Bankroll",  value: `€${balance.toFixed(2)}`,               color: "green" },
-          { label: "Sessions gesamt",  value: MOCK_STATS.totalSessions,                color: "text"  },
-          { label: "Stunden gespielt", value: MOCK_STATS.totalHours,                   color: "text"  },
-          { label: "Gewinnrate",       value: `${MOCK_STATS.winRate}%`,                color: "gold"  },
+          { label: "Gesamt Bankroll",  value: `€${balance.toFixed(2)}`, color: "green" },
+          { label: "Sessions gesamt",  value: sessions.length,           color: "text"  },
+          { label: "Deposits",         value: events.filter(e => e.event_type === "deposit").length, color: "text" },
+          { label: "Gewinnrate",       value: `${winRate}%`,             color: "gold"  },
         ].map((item, i) => (
           <div key={i} style={css.statCard}>
             <div style={{ fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.textDim, marginBottom: "6px" }}>{item.label}</div>
@@ -682,14 +845,14 @@ function StatsView() {
       </div>
       <div style={css.card}>
         <div style={css.sectionTitle}>Bankroll-Entwicklung 2026</div>
-        <BankrollChart data={MOCK_CHART_DATA} />
+        <BankrollChart data={chartData} />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "16px" }}>
         <div style={css.card}>
           <div style={css.sectionTitle}>Sessions nach Modus</div>
           {[
-            { label: "Cashgame", count: 34, pct: 72, color: COLORS.green },
-            { label: "Turnier",  count: 13, pct: 28, color: COLORS.gold  },
+            { label: "Cashgame", count: cashSessions.length,  pct: Math.round((cashSessions.length / total) * 100),  color: COLORS.green },
+            { label: "Turnier",  count: tournSessions.length, pct: Math.round((tournSessions.length / total) * 100), color: COLORS.gold  },
           ].map((item, i) => (
             <div key={i} style={{ marginBottom: "12px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", fontSize: "13px", color: COLORS.textMuted }}>
@@ -703,18 +866,15 @@ function StatsView() {
         </div>
         <div style={css.card}>
           <div style={css.sectionTitle}>Sessions pro Monat</div>
-          {[
-            { label: "Januar",       count: 9  },
-            { label: "Februar",      count: 14 },
-            { label: "März",         count: 16 },
-            { label: "April (lfd.)", count: 8  },
-          ].map((item, i) => (
+          {monthEntries.length === 0 ? (
+            <div style={{ fontSize: "13px", color: COLORS.textDim }}>Noch keine Session-Daten.</div>
+          ) : monthEntries.map(([label, count], i) => (
             <div key={i} style={{ marginBottom: "10px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px", fontSize: "13px", color: COLORS.textMuted }}>
-                <span>{item.label}</span><span style={{ color: COLORS.text, fontWeight: "600" }}>{item.count}</span>
+                <span>{label}</span><span style={{ color: COLORS.text, fontWeight: "600" }}>{count}</span>
               </div>
               <div style={{ height: "5px", background: COLORS.surface, borderRadius: "3px" }}>
-                <div style={{ height: "100%", width: `${(item.count / 16) * 100}%`, background: COLORS.green, opacity: 0.7, borderRadius: "3px" }} />
+                <div style={{ height: "100%", width: `${(count / maxMonth) * 100}%`, background: COLORS.green, opacity: 0.7, borderRadius: "3px" }} />
               </div>
             </div>
           ))}
@@ -752,14 +912,14 @@ export default function PokerBankrollManager() {
   const [activeView, setActiveView] = useState("dashboard");
 
   const renderView = () => {
-  switch (activeView) {
-    case "dashboard":     return <DashboardView />;
-    case "transaktionen": return <TransaktionenView onNavigate={setActiveView} />;
-    case "history":       return <HistoryView />;
-    case "sessions":      return <SessionsView />;
-    case "stats":         return <StatsView />;
-    default:              return <DashboardView />;
-  }
+    switch (activeView) {
+      case "dashboard":     return <DashboardView />;
+      case "transaktionen": return <TransaktionenView onNavigate={setActiveView} />;
+      case "history":       return <HistoryView />;
+      case "sessions":      return <SessionsView />;
+      case "stats":         return <StatsView />;
+      default:              return <DashboardView />;
+    }
   };
 
   const meta = VIEW_META[activeView];
