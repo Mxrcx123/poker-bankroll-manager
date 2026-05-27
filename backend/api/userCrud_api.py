@@ -1,25 +1,22 @@
-import sqlalchemy
-from fastapi import FastAPI
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from model.base import get_db
 from crud.userCrud import UserCrud
 
-app = FastAPI()
+router = APIRouter()
 
-@app.post("user/{db_session}/{user_name}/{user_password}")
-# This endpoint creates a new user in a database with a name and password.
-async def create_user(db_session: Session, user_name, user_password):
+@router.post("/user/{user_name}/{user_password}")
+async def create_user(user_name: str, user_password: str, db_session: Session = Depends(get_db)):
     try:
-        # Call the create_user function from the Crud module to create a new user in the database.
         UserCrud.create_user(db_session, user_name, user_password)
         return {"message": "User created successfully"}
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/user/{db_session}/{user_id}")
-# This endpoint returns the data of a user based on its id
-async def get_user_by_id(db_session: Session, id: int):
+@router.get("/user/{user_id}")
+async def get_user_by_id(user_id: int, db_session: Session = Depends(get_db)):
     try:
-        user = UserCrud.get_user_by_id(db_session, id)
+        user = UserCrud.get_user_by_id(db_session, user_id)
         return {
             "message": "successfully got user",
             "name": f"{user.username}",
@@ -29,19 +26,18 @@ async def get_user_by_id(db_session: Session, id: int):
     except Exception as e:
         return {"error": str(e)}
 
-@app.update("/user/{db_session}/{user_id}/{new_username}/{new_password}")
-# This endpoint changes the values of a user based on its id
-async def update_user_by_id(db_session: Session, user_id: int, new_username, new_password):
+@router.put("/user/{user_id}/{new_username}/{new_password}")
+async def update_user_by_id(user_id: int, new_username: str, new_password: str, db_session: Session = Depends(get_db)):
     try:
         UserCrud.update_user_by_id(db_session, user_id, new_username, new_password)
         return {"message": "successfully updated user"}
     except Exception as e:
         return {"error": str(e)}
 
-@app.delete("/user/delete/{db_session}/{user_id}")
-async def delete_user_by_id(db_session: Session, user_id: int):
+@router.delete("/user/delete/{user_id}")
+async def delete_user_by_id(user_id: int, db_session: Session = Depends(get_db)):
     try:
         UserCrud.delete_user_by_id(db_session, user_id)
-        return {"message": "successfluly deleted user"}
+        return {"message": "successfully deleted user"}
     except Exception as e:
         return {"error": str(e)}

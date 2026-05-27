@@ -1,21 +1,22 @@
-from fastapi import FastAPI
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from model.base import get_db
 from crud.gameModeCrud import GameModeCrud
 
-app = FastAPI()
+router = APIRouter()
 
-@app.post("/game-mode/{db_session}/{title}")
+@router.post("/game-mode/{title}")
 # This endpoint creates a new game mode in the database.
-async def create_game_mode(db_session: Session, title: str):
+async def create_game_mode(title: str, db_session: Session = Depends(get_db)):
     try:
         GameModeCrud.create_game_mode(db_session, title)
         return {"message": "Game mode created successfully"}
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/game-mode/{db_session}/{game_mode_id}")
+@router.get("/game-mode/{game_mode_id}")
 # This endpoint returns a game mode based on its id.
-async def get_game_mode_by_id(db_session: Session, game_mode_id: int):
+async def get_game_mode_by_id(game_mode_id: int, db_session: Session = Depends(get_db)):
     try:
         game_mode = GameModeCrud.get_game_mode_by_id(db_session, game_mode_id)
         return {
@@ -26,9 +27,9 @@ async def get_game_mode_by_id(db_session: Session, game_mode_id: int):
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/game-mode/title/{db_session}/{title}")
+@router.get("/game-mode/title/{title}")
 # This endpoint returns a game mode based on its title.
-async def get_game_mode_by_title(db_session: Session, title: str):
+async def get_game_mode_by_title(title: str, db_session: Session = Depends(get_db)):
     try:
         game_mode = GameModeCrud.get_game_mode_by_title(db_session, title)
         return {
@@ -39,9 +40,9 @@ async def get_game_mode_by_title(db_session: Session, title: str):
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/game-mode/all/{db_session}")
+@router.get("/game-mode/all" )
 # This endpoint returns all game modes.
-async def get_all_game_modes(db_session: Session):
+async def get_all_game_modes(db_session: Session = Depends(get_db)):
     try:
         game_modes = GameModeCrud.get_all_game_modes(db_session)
         return {
@@ -51,18 +52,18 @@ async def get_all_game_modes(db_session: Session):
     except Exception as e:
         return {"error": str(e)}
 
-@app.put("/game-mode/{db_session}/{game_mode_id}")
+@router.put("/game-mode/{game_mode_id}")
 # This endpoint updates a game mode based on its id.
-async def update_game_mode(db_session: Session, game_mode_id: int, title: str = None):
+async def update_game_mode(game_mode_id: int, title: str = None, db_session: Session = Depends(get_db)):
     try:
         GameModeCrud.update_game_mode(db_session, game_mode_id, title)
         return {"message": "successfully updated game mode"}
     except Exception as e:
         return {"error": str(e)}
 
-@app.delete("/game-mode/delete/{db_session}/{game_mode_id}")
+@router.delete("/game-mode/delete/{game_mode_id}")
 # This endpoint deletes a game mode based on its id.
-async def delete_game_mode(db_session: Session, game_mode_id: int):
+async def delete_game_mode(game_mode_id: int, db_session: Session = Depends(get_db)):
     try:
         GameModeCrud.delete_game_mode(db_session, game_mode_id)
         return {"message": "successfully deleted game mode"}
