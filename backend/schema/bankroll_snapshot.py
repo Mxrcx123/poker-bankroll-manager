@@ -1,12 +1,14 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, condecimal
 from datetime import datetime
-from decimal import Decimal
+
+# Decimal type constrained to 2 decimal places
+Money2 = condecimal(decimal_places=2)
 
 
 class BankrollSnapshotCreate(BaseModel):
     """Schema for creating a bankroll snapshot"""
     user_id: int = Field(..., description="User ID")
-    amount: Decimal = Field(..., decimal_places=2, description="Bankroll amount")
+    amount: Money2 = Field(..., description="Bankroll amount")
 
     class Config:
         json_schema_extra = {
@@ -19,7 +21,7 @@ class BankrollSnapshotCreate(BaseModel):
 
 class BankrollSnapshotUpdate(BaseModel):
     """Schema for updating a bankroll snapshot"""
-    amount: Decimal = Field(..., decimal_places=2, description="Bankroll amount")
+    amount: Money2 = Field(..., description="Bankroll amount")
 
     class Config:
         json_schema_extra = {
@@ -33,7 +35,7 @@ class BankrollSnapshotResponse(BaseModel):
     """Schema for bankroll snapshot response"""
     id: int
     user_id: int
-    amount: Decimal
+    amount: Money2
     recorded_at: datetime
 
     class Config:

@@ -1,18 +1,20 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, condecimal
 from typing import Optional
-from decimal import Decimal
+
+# Decimal type constrained to 2 decimal places
+Money2 = condecimal(decimal_places=2)
 
 
 class TournamentCreate(BaseModel):
     """Schema for creating a tournament"""
     session_id: int = Field(..., description="Session ID")
-    buy_in: Decimal = Field(..., decimal_places=2, description="Tournament buy-in")
-    fee: Optional[Decimal] = Field(None, decimal_places=2, description="Tournament fee")
+    buy_in: Money2 = Field(..., description="Tournament buy-in")
+    fee: Optional[Money2] = Field(None, description="Tournament fee")
     rebuys: int = Field(default=0, description="Number of rebuys")
-    rebuy_cost: Optional[Decimal] = Field(None, decimal_places=2, description="Cost per rebuy")
+    rebuy_cost: Optional[Money2] = Field(None, description="Cost per rebuy")
     add_ons: int = Field(default=0, description="Number of add-ons")
-    add_on_cost: Optional[Decimal] = Field(None, decimal_places=2, description="Cost per add-on")
-    winnings: Decimal = Field(default=0, decimal_places=2, description="Total winnings")
+    add_on_cost: Optional[Money2] = Field(None, description="Cost per add-on")
+    winnings: Money2 = Field(default=0, description="Total winnings")
     finish_position: Optional[int] = Field(None, description="Finishing position")
 
     class Config:
@@ -33,13 +35,13 @@ class TournamentCreate(BaseModel):
 
 class TournamentUpdate(BaseModel):
     """Schema for updating a tournament"""
-    buy_in: Optional[Decimal] = Field(None, decimal_places=2, description="Tournament buy-in")
-    fee: Optional[Decimal] = Field(None, decimal_places=2, description="Tournament fee")
+    buy_in: Optional[Money2] = Field(None, description="Tournament buy-in")
+    fee: Optional[Money2] = Field(None, description="Tournament fee")
     rebuys: Optional[int] = Field(None, description="Number of rebuys")
-    rebuy_cost: Optional[Decimal] = Field(None, decimal_places=2, description="Cost per rebuy")
+    rebuy_cost: Optional[Money2] = Field(None, description="Cost per rebuy")
     add_ons: Optional[int] = Field(None, description="Number of add-ons")
-    add_on_cost: Optional[Decimal] = Field(None, decimal_places=2, description="Cost per add-on")
-    winnings: Optional[Decimal] = Field(None, decimal_places=2, description="Total winnings")
+    add_on_cost: Optional[Money2] = Field(None, description="Cost per add-on")
+    winnings: Optional[Money2] = Field(None, description="Total winnings")
     finish_position: Optional[int] = Field(None, description="Finishing position")
 
     class Config:
@@ -61,13 +63,13 @@ class TournamentResponse(BaseModel):
     """Schema for tournament response"""
     id: int
     session_id: int
-    buy_in: Decimal
-    fee: Optional[Decimal]
+    buy_in: Money2
+    fee: Optional[Money2]
     rebuys: int
-    rebuy_cost: Optional[Decimal]
+    rebuy_cost: Optional[Money2]
     add_ons: int
-    add_on_cost: Optional[Decimal]
-    winnings: Decimal
+    add_on_cost: Optional[Money2]
+    winnings: Money2
     finish_position: Optional[int]
 
     class Config:

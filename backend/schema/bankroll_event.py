@@ -1,13 +1,16 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, condecimal
 from datetime import datetime
 from typing import Optional
-from decimal import Decimal
+
+
+# Decimal type constrained to 2 decimal places
+Money2 = condecimal(decimal_places=2)
 
 
 class BankrollEventCreate(BaseModel):
     """Schema for creating a bankroll event"""
     user_id: int = Field(..., description="User ID")
-    amount: Decimal = Field(..., decimal_places=2, description="Transaction amount")
+    amount: Money2 = Field(..., description="Transaction amount")
     event_type: str = Field(..., description="Event type (e.g., deposit, withdrawal, session_profit, session_loss, refund, bonus, fee)")
     notes: Optional[str] = Field(None, description="Event notes")
 
@@ -29,7 +32,7 @@ class BankrollEventCreate(BaseModel):
 
 class BankrollEventUpdate(BaseModel):
     """Schema for updating a bankroll event"""
-    amount: Optional[Decimal] = Field(None, decimal_places=2, description="Transaction amount")
+    amount: Optional[Money2] = Field(None, description="Transaction amount")
     event_type: Optional[str] = Field(None, description="Event type")
     notes: Optional[str] = Field(None, description="Event notes")
 
@@ -47,7 +50,7 @@ class BankrollEventResponse(BaseModel):
     """Schema for bankroll event response"""
     id: int
     user_id: int
-    amount: Decimal
+    amount: Money2
     event_type: str
     occurred_at: datetime
     notes: Optional[str]

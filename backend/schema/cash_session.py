@@ -1,13 +1,15 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, condecimal
 from typing import Optional
-from decimal import Decimal
+
+# Decimal type constrained to 2 decimal places
+Money2 = condecimal(decimal_places=2)
 
 
 class CashSessionCreate(BaseModel):
     """Schema for creating a cash session"""
     session_id: int = Field(..., description="Session ID")
-    buy_in: Decimal = Field(..., decimal_places=2, description="Buy-in amount")
-    cash_out: Optional[Decimal] = Field(None, decimal_places=2, description="Cash-out amount")
+    buy_in: Money2 = Field(..., description="Buy-in amount")
+    cash_out: Optional[Money2] = Field(None, description="Cash-out amount")
 
     class Config:
         json_schema_extra = {
@@ -21,8 +23,8 @@ class CashSessionCreate(BaseModel):
 
 class CashSessionUpdate(BaseModel):
     """Schema for updating a cash session"""
-    buy_in: Optional[Decimal] = Field(None, decimal_places=2, description="Buy-in amount")
-    cash_out: Optional[Decimal] = Field(None, decimal_places=2, description="Cash-out amount")
+    buy_in: Optional[Money2] = Field(None, description="Buy-in amount")
+    cash_out: Optional[Money2] = Field(None, description="Cash-out amount")
 
     class Config:
         json_schema_extra = {
@@ -37,8 +39,8 @@ class CashSessionResponse(BaseModel):
     """Schema for cash session response"""
     id: int
     session_id: int
-    buy_in: Decimal
-    cash_out: Optional[Decimal]
+    buy_in: Money2
+    cash_out: Optional[Money2]
 
     class Config:
         from_attributes = True

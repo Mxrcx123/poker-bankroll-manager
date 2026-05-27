@@ -2,6 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from db.init_db import init_db
 from api import withdrawal_api
+import uvicorn
+
+# Bemerkung: Wenn man die Requirements nicht installieren kann, dann folgenden Befehl probieren: py -3.12 -m pip install -r .\backend\requirements.txt
+# Backend starten mit: python main.py  (aus dem .backend-Ordner)
 
 # Initialize database
 try:
@@ -44,5 +48,4 @@ def health_check():
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
