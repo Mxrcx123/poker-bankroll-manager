@@ -5,7 +5,7 @@ from api import withdrawal_api
 import uvicorn
 
 # Bemerkung: Wenn man die Requirements nicht installieren kann, dann folgenden Befehl probieren: py -3.12 -m pip install -r .\backend\requirements.txt
-# Backend starten mit: python main.py  (aus dem .backend-Ordner)
+# Backend starten mit: python .\backend\main.py (aus dem Hauptordner poker-bankroll-manager)
 
 # Initialize database
 try:
