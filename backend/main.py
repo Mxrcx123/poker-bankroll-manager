@@ -1,6 +1,9 @@
+#Überarbeitet von Andreas Haas
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from db.init_db import init_db
+import model  # Sicherstellen, dass alle Models geladen sind, bevor init_db() aufgerufen wird
 
 # Importiere alle Router – Pfad anpassen je nach Ordnerstruktur!
 from api.check_api_connection import router as check_router
@@ -12,7 +15,7 @@ from api.gameModeCrud_api import router as game_mode_router
 from api.platformCrud_api import router as platform_router
 from api.bankrollEventCrud_api import router as bankroll_event_router
 from api.bankrollSnapshotCrud_api import router as bankroll_snapshot_router
-
+from api.deposit_api import router as deposit_router
 from api.withdrawal_api import router as withdrawal_router
 
 try:
@@ -44,7 +47,7 @@ app.include_router(game_mode_router)
 app.include_router(platform_router)
 app.include_router(bankroll_event_router)
 app.include_router(bankroll_snapshot_router)
-
+app.include_router(deposit_router)
 app.include_router(withdrawal_router)
 
 @app.get("/health")

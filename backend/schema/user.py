@@ -1,3 +1,4 @@
+#Überarbeitet von Andreas Haas
 from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional

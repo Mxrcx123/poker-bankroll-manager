@@ -1,9 +1,5 @@
 import { useState } from "react";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Farben — identisch mit dem restlichen Projekt
-// ─────────────────────────────────────────────────────────────────────────────
-
 const COLORS = {
   bg: "#0d1520",
   surface: "#111c2d",
@@ -22,35 +18,27 @@ const COLORS = {
   textDim: "#3d5a8a",
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Icons
-// ─────────────────────────────────────────────────────────────────────────────
-
 const MinusIcon = () => (
   <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
     <path d="M5 12h14" />
   </svg>
 );
-
 const CheckIcon = () => (
   <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
     <path d="M5 13l4 4L19 7" />
   </svg>
 );
-
 const EuroIcon = () => (
   <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
     <path d="M17 7.5A6 6 0 1 0 17 16.5M3 10h10M3 14h10" />
   </svg>
 );
-
 const CalendarIcon = () => (
   <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
     <rect x="3" y="4" width="18" height="16" rx="2" />
     <path d="M16 2v4M8 2v4M3 10h18" />
   </svg>
 );
-
 const NoteIcon = () => (
   <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -60,10 +48,6 @@ const NoteIcon = () => (
   </svg>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Hilfsfunktionen
-// ─────────────────────────────────────────────────────────────────────────────
-
 function getTodayString() {
   return new Date().toISOString().split("T")[0];
 }
@@ -71,7 +55,6 @@ function getTodayString() {
 function validateForm(amount, date, currentBankroll) {
   const errors = {};
   const parsed = parseFloat(amount);
-
   if (!amount || amount.trim() === "") {
     errors.amount = "Betrag ist erforderlich.";
   } else if (isNaN(parsed) || parsed <= 0) {
@@ -81,15 +64,9 @@ function validateForm(amount, date, currentBankroll) {
   } else if (currentBankroll !== undefined && parsed > currentBankroll) {
     errors.amount = `Betrag überschreitet die aktuelle Bankroll (€${currentBankroll.toFixed(2)}).`;
   }
-
   if (!date) errors.date = "Datum ist erforderlich.";
-
   return errors;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// FormField — gleiche Struktur wie in AddDeposit
-// ─────────────────────────────────────────────────────────────────────────────
 
 function FormField({ label, icon, error, children }) {
   return (
@@ -114,19 +91,16 @@ function FormField({ label, icon, error, children }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Props:
-//   currentBankroll  — aktuelle Bankroll (für Validierung & Anzeige)
-//   onSuccess(event) — wird nach dem Speichern aufgerufen
-//   onCancel()       — optional, zeigt Abbrechen-Button
+// onSuccess(formData) wird AWAITED — API-Fehler werden korrekt angezeigt
 // ─────────────────────────────────────────────────────────────────────────────
-
 export default function RecordWithdrawal({ currentBankroll, onSuccess, onCancel }) {
-  const [amount,  set_amount]  = useState("");
-  const [date,    set_date]    = useState(getTodayString());
-  const [notes,   set_notes]   = useState("");
-  const [errors,  set_errors]  = useState({});
-  const [status,  set_status]  = useState("idle");
-  const [touched, set_touched] = useState({});
+  const [amount,   set_amount]   = useState("");
+  const [date,     set_date]     = useState(getTodayString());
+  const [notes,    set_notes]    = useState("");
+  const [errors,   set_errors]   = useState({});
+  const [status,   set_status]   = useState("idle");
+  const [touched,  set_touched]  = useState({});
+  const [apiError, set_apiError] = useState("");
 
   const parsed_amount = parseFloat(amount) || 0;
 
@@ -142,35 +116,27 @@ export default function RecordWithdrawal({ currentBankroll, onSuccess, onCancel 
     if (Object.keys(errs).length > 0) return;
 
     set_status("loading");
+    set_apiError("");
 
-    // ── API-Platzhalter — später ersetzen ──────────────────────────────────
-    // const res = await fetch("/api/bankroll-events", {
-    //   method: "POST",
-    //   headers: { "Content-Type": "application/json" },
-    //   body: JSON.stringify({ type: "withdrawal", amount: parseFloat(amount), date, notes }),
-    // });
-    // const savedEvent = await res.json();
-    // ──────────────────────────────────────────────────────────────────────
-    await new Promise((r) => setTimeout(r, 700));
-
-    const new_event = {
-      id: Date.now(),
-      type: "withdrawal",
-      amount: parsed_amount,
-      date,
-      notes: notes.trim(),
-    };
-
-    set_status("success");
-    setTimeout(() => {
+    try {
+      await onSuccess({
+        amount: parsed_amount,
+        date,
+        notes: notes.trim(),
+      });
+      set_status("success");
+      setTimeout(() => {
+        set_status("idle");
+        set_amount("");
+        set_date(getTodayString());
+        set_notes("");
+        set_touched({});
+        set_errors({});
+      }, 1400);
+    } catch (e) {
+      set_apiError(e.message ?? "Fehler beim Speichern.");
       set_status("idle");
-      set_amount("");
-      set_date(getTodayString());
-      set_notes("");
-      set_touched({});
-      set_errors({});
-      if (onSuccess) onSuccess(new_event);
-    }, 1400);
+    }
   }
 
   const input_style = (has_error) => ({
@@ -182,7 +148,6 @@ export default function RecordWithdrawal({ currentBankroll, onSuccess, onCancel 
     fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
   });
 
-  // ── Erfolgs-Screen ──────────────────────────────────────────────────────────
   if (status === "success") {
     return (
       <div style={{
@@ -208,19 +173,14 @@ export default function RecordWithdrawal({ currentBankroll, onSuccess, onCancel 
     );
   }
 
-  // ── Formular ────────────────────────────────────────────────────────────────
   return (
     <div style={{
       background: COLORS.card, border: `1px solid ${COLORS.red}30`,
       borderRadius: "12px", padding: "20px",
       fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
     }}>
-      {/* Header */}
       <div style={{ marginBottom: "20px" }}>
-        <div style={{
-          fontSize: "11px", fontWeight: "600", letterSpacing: "0.1em",
-          textTransform: "uppercase", color: COLORS.redText, marginBottom: "4px",
-        }}>
+        <div style={{ fontSize: "11px", fontWeight: "600", letterSpacing: "0.1em", textTransform: "uppercase", color: COLORS.redText, marginBottom: "4px" }}>
           Bankroll
         </div>
         <div style={{ fontSize: "17px", fontWeight: "700", color: COLORS.text }}>
@@ -228,15 +188,15 @@ export default function RecordWithdrawal({ currentBankroll, onSuccess, onCancel 
         </div>
       </div>
 
-      {/* Felder */}
+      {apiError && (
+        <div style={{ fontSize: "12px", color: COLORS.redText, background: "#450a0a", borderRadius: "8px", padding: "10px 12px", marginBottom: "14px" }}>
+          ⚠ {apiError}
+        </div>
+      )}
+
       <FormField label="Betrag" icon={<EuroIcon />} error={touched.amount && errors.amount}>
         <div style={{ position: "relative" }}>
-          <span style={{
-            position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)",
-            color: COLORS.textMuted, fontSize: "14px", pointerEvents: "none",
-          }}>
-            €
-          </span>
+          <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: COLORS.textMuted, fontSize: "14px", pointerEvents: "none" }}>€</span>
           <input
             type="number" min="0.01" step="0.01" placeholder="0.00"
             value={amount}
@@ -265,7 +225,6 @@ export default function RecordWithdrawal({ currentBankroll, onSuccess, onCancel 
         />
       </FormField>
 
-      {/* Vorschau */}
       {parsed_amount > 0 && (
         <div style={{
           background: COLORS.surface, border: `1px solid ${COLORS.border}`,
@@ -279,7 +238,6 @@ export default function RecordWithdrawal({ currentBankroll, onSuccess, onCancel 
         </div>
       )}
 
-      {/* Buttons */}
       <div style={{ display: "flex", gap: "10px" }}>
         {onCancel && (
           <button onClick={onCancel} style={{

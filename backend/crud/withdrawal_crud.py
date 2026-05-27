@@ -1,3 +1,4 @@
+#Überarbeitet von Andreas Haas
 from model.withdrawal import Withdrawal
 from uuid import uuid4
 from datetime import datetime
@@ -39,7 +40,7 @@ def update_withdrawal(w_id: str, data):
     if data.note is not None:
         withdrawal.note = data.note
 
-    withdrawal.updated_at = datetime.utcnow()
+    withdrawal.updated_at = datetime.now()
     return withdrawal
 
 
