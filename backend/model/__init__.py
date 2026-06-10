@@ -8,3 +8,4 @@ from .tournament import Tournament
 from .bankroll_events import BankrollEvent
 from .bankroll_snapshot import BankrollSnapshot
 from .deposit import Deposit
+from .withdrawal import Withdrawal

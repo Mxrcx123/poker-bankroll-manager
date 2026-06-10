@@ -5,7 +5,7 @@ import CreateSession from "./CreateSession.jsx";
 import AuthScreen from "./AuthScreen.jsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// API CONFIG  (USER_ID kommt jetzt vom eingeloggten User — keine Konstante mehr)
+// API CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
 
 const BASE_URL = "http://localhost:8000";
@@ -28,17 +28,20 @@ const api = {
   getBankrollEvents: (userId) =>
     apiFetch(`/bankroll-event/user/${userId}`),
 
+  // Deposit via deposit_api.py → POST /deposits/ mit JSON-Body
+  // Erstellt Deposit-Eintrag + BankrollEvent + aktualisiert user.balance
   createDeposit: (userId, amount, notes = "") =>
     apiFetch(`/deposits/`, {
       method: "POST",
-      body: JSON.stringify({ user_id: userId, amount, notes }),
-      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId, amount: Number(amount), notes: notes || null }),
     }),
 
-  createWithdrawal: (amount, notes = "") =>
+  // Withdrawal via withdrawal_api.py → POST /withdrawals/ mit JSON-Body
+  // Erstellt Withdrawal-Eintrag + BankrollEvent (negativer Betrag) + aktualisiert user.balance
+  createWithdrawal: (userId, amount, notes = "") =>
     apiFetch(`/withdrawals/`, {
       method: "POST",
-      body: JSON.stringify({ amount, notes }),
+      body: JSON.stringify({ user_id: userId, amount: Number(amount), note: notes || null, currency: "EUR" }),
     }),
 
   // ── Sessions ───────────────────────────────────────────────────────────────
@@ -97,19 +100,29 @@ const api = {
 const GAME_MODE_ID = { cashgame: 1, tournament: 2 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HOOKS  (alle User-spezifischen Hooks nehmen jetzt userId als Parameter)
+// HOOKS
 // ─────────────────────────────────────────────────────────────────────────────
 
+// FIX 1: Guard gegen undefined/null userId — verhindert /bankroll-event/user/undefined
+// FIX 3: Setzt Events auf [] zurück wenn userId wegfällt (Logout)
 function useBankrollEvents(userId) {
   const [events,  setEvents]  = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState(null);
 
   const load = useCallback(async () => {
+    // FIX 1: Blockiert Fetch solange kein gültiger User — kein Request an /user/undefined
+    if (!userId) {
+      setEvents([]);   // FIX 3: State bei Logout/kein User sofort leeren
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
+      setError(null);
       const data = await api.getBankrollEvents(userId);
-      setEvents(data.events ?? []);
+      // FIX 1: API gibt "bankroll_events" zurück, nicht "events"
+      setEvents(data.bankroll_events ?? data.events ?? []);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -123,12 +136,19 @@ function useBankrollEvents(userId) {
 
 function useSessions(userId) {
   const [sessions, setSessions] = useState([]);
-  const [loading,  setLoading]  = useState(true);
+  const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState(null);
 
   const load = useCallback(async () => {
+    // FIX 1: Guard gegen undefined userId
+    if (!userId) {
+      setSessions([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
+      setError(null);
       const data = await api.getSessions(userId);
       const raw  = data.sessions ?? [];
 
@@ -170,6 +190,8 @@ function useSessions(userId) {
 function useSnapshots(userId) {
   const [snapshots, setSnapshots] = useState([]);
   useEffect(() => {
+    // FIX 1: Guard gegen undefined userId
+    if (!userId) { setSnapshots([]); return; }
     api.getSnapshots(userId)
       .then(data => setSnapshots(data.snapshots ?? []))
       .catch(() => setSnapshots([]));
@@ -446,16 +468,19 @@ function BankrollChart({ data }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VIEWS  (alle erhalten userId als Prop)
+// VIEWS
+// FIX 2: Alle Views erhalten events + reloadEvents als Props von der Hauptkomponente.
+//         Dadurch wird nach jeder Transaktion die Liste appweit aktualisiert,
+//         egal in welcher View man sich gerade befindet.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DashboardView({ userId }) {
-  const { events, loading, error } = useBankrollEvents(userId);
+function DashboardView({ userId, events, eventsLoading, eventsError }) {
   const { sessions, loading: sessLoading } = useSessions(userId);
   const snapshots = useSnapshots(userId);
 
-  const totalDeposits    = events.filter(e => e.event_type === "deposit").reduce((s, e) => s + e.amount, 0);
-  const totalWithdrawals = events.filter(e => e.event_type === "withdrawal").reduce((s, e) => s + e.amount, 0);
+  // Math.abs(): withdrawal_crud speichert negative Betraege → abs() macht die Berechnung robust
+  const totalDeposits    = events.filter(e => e.event_type?.toUpperCase() === "DEPOSIT"   ).reduce((s, e) => s + Math.abs(e.amount), 0);
+  const totalWithdrawals = events.filter(e => e.event_type?.toUpperCase() === "WITHDRAWAL").reduce((s, e) => s + Math.abs(e.amount), 0);
   const balance          = totalDeposits - totalWithdrawals;
 
   const chartData = snapshots.map(s => ({
@@ -469,8 +494,8 @@ function DashboardView({ userId }) {
   const bestSession  = profits.length > 0 ? Math.max(...profits) : 0;
   const worstSession = profits.length > 0 ? Math.min(...profits) : 0;
 
-  if (loading) return <div style={css.loadingText}>Lade Bankroll-Daten…</div>;
-  if (error)   return <div style={css.errorText}>Fehler: {error}</div>;
+  if (eventsLoading) return <div style={css.loadingText}>Lade Bankroll-Daten…</div>;
+  if (eventsError)   return <div style={css.errorText}>Fehler: {eventsError}</div>;
 
   return (
     <div>
@@ -529,13 +554,13 @@ function DashboardView({ userId }) {
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             {events.slice(0, 4).map((ev) => (
               <div key={ev.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: COLORS.surface, borderRadius: "8px", border: `1px solid ${COLORS.border}` }}>
-                <span style={css.tag(ev.event_type === "deposit" ? "green" : "red")}>{ev.event_type === "deposit" ? "Einzahlung" : "Auszahlung"}</span>
+                <span style={css.tag(ev.event_type?.toUpperCase() === "DEPOSIT" ? "green" : "red")}>{ev.event_type?.toUpperCase() === "DEPOSIT" ? "Einzahlung" : "Auszahlung"}</span>
                 <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: "14px", fontWeight: "700", color: ev.event_type === "deposit" ? COLORS.greenText : COLORS.redText }}>
-                    {ev.event_type === "deposit" ? "+" : "-"}€{ev.amount.toFixed(2)}
+                  <div style={{ fontSize: "14px", fontWeight: "700", color: ev.event_type?.toUpperCase() === "DEPOSIT" ? COLORS.greenText : COLORS.redText }}>
+                    {ev.event_type?.toUpperCase() === "DEPOSIT" ? "+" : "-"}€{ev.amount.toFixed(2)}
                   </div>
                   <div style={{ fontSize: "11px", color: COLORS.textDim }}>
-                    {ev.created_at ? new Date(ev.created_at).toLocaleDateString("de-AT") : ""}
+                    {ev.occurred_at ? new Date(ev.occurred_at).toLocaleDateString("de-AT") : ""}
                   </div>
                 </div>
               </div>
@@ -578,35 +603,70 @@ function DashboardView({ userId }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TRANSAKTIONEN VIEW
+// FIX 2: reloadEvents kommt von der Hauptkomponente — aktualisiert alle Views
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TransaktionenView({ userId, onNavigate }) {
-  const { events, reload } = useBankrollEvents(userId);
+function TransaktionenView({ userId, events, reloadEvents, onNavigate }) {
+  const [notification, setNotification] = useState(null); // { type: "success"|"error", msg: string }
 
-  const totalDeposits    = events.filter(e => e.event_type === "deposit").reduce((s, e) => s + e.amount, 0);
-  const totalWithdrawals = events.filter(e => e.event_type === "withdrawal").reduce((s, e) => s + e.amount, 0);
+  // Withdrawal-Betraege werden in withdrawal_crud mit negativem Vorzeichen gespeichert
+  // Math.abs() stellt sicher, dass die Berechnung korrekt ist egal ob + oder -
+  const totalDeposits    = events.filter(e => e.event_type?.toUpperCase() === "DEPOSIT"   ).reduce((s, e) => s + Math.abs(e.amount), 0);
+  const totalWithdrawals = events.filter(e => e.event_type?.toUpperCase() === "WITHDRAWAL").reduce((s, e) => s + Math.abs(e.amount), 0);
   const currentBankroll  = totalDeposits - totalWithdrawals;
 
+  function showNotification(type, msg) {
+    setNotification({ type, msg });
+    setTimeout(() => setNotification(null), 3500);
+  }
+
+  // try/finally garantiert: reloadEvents() wird IMMER aufgerufen,
+  // auch wenn api.createDeposit() einen Fehler wirft.
   async function handle_deposit_success(formData) {
-    await api.createDeposit(userId, formData.amount, formData.notes ?? "");
-    await reload();
-    setTimeout(() => onNavigate("history"), 1600);
+    try {
+      await api.createDeposit(userId, formData.amount, formData.notes ?? "");
+      showNotification("success", `Einzahlung von €${Number(formData.amount).toFixed(2)} erfasst!`);
+      setTimeout(() => onNavigate("history"), 1600);
+    } catch (e) {
+      showNotification("error", `Fehler beim Speichern: ${e.message}`);
+    } finally {
+      await reloadEvents();
+    }
   }
 
   async function handle_withdrawal_success(formData) {
-    await api.createWithdrawal(formData.amount, formData.notes ?? "");
-    await reload();
-    setTimeout(() => onNavigate("history"), 1600);
+    try {
+      await api.createWithdrawal(userId, formData.amount, formData.notes ?? "");
+      showNotification("success", `Auszahlung von €${Number(formData.amount).toFixed(2)} erfasst!`);
+      setTimeout(() => onNavigate("history"), 1600);
+    } catch (e) {
+      showNotification("error", `Fehler beim Speichern: ${e.message}`);
+    } finally {
+      await reloadEvents();
+    }
   }
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", maxWidth: "960px" }}>
-      {/* userId wird jetzt korrekt weitergegeben */}
-      <AddDeposit userId={userId} onSuccess={handle_deposit_success} />
-      <RecordWithdrawal
-        currentBankroll={currentBankroll}
-        onSuccess={handle_withdrawal_success}
-      />
+    <div>
+      {notification && (
+        <div style={{
+          padding: "12px 18px", borderRadius: "10px", marginBottom: "16px",
+          background: notification.type === "success" ? COLORS.greenMuted : COLORS.redMuted,
+          border: `1px solid ${notification.type === "success" ? COLORS.green : COLORS.red}40`,
+          color:  notification.type === "success" ? COLORS.greenText : COLORS.redText,
+          fontSize: "13px", fontWeight: "600",
+          display: "flex", alignItems: "center", gap: "8px",
+        }}>
+          {notification.type === "success" ? "✓" : "✕"} {notification.msg}
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", maxWidth: "960px" }}>
+        <AddDeposit userId={userId} onSuccess={handle_deposit_success} />
+        <RecordWithdrawal
+          currentBankroll={currentBankroll}
+          onSuccess={handle_withdrawal_success}
+        />
+      </div>
     </div>
   );
 }
@@ -615,18 +675,16 @@ function TransaktionenView({ userId, onNavigate }) {
 // HISTORY VIEW
 // ─────────────────────────────────────────────────────────────────────────────
 
-function HistoryView({ userId }) {
-  const { events, loading, error } = useBankrollEvents(userId);
-
-  const totalDeposits    = events.filter(e => e.event_type === "deposit").reduce((s, e) => s + e.amount, 0);
-  const totalWithdrawals = events.filter(e => e.event_type === "withdrawal").reduce((s, e) => s + e.amount, 0);
+function HistoryView({ events, eventsLoading, eventsError }) {
+  const totalDeposits    = events.filter(e => e.event_type?.toUpperCase() === "DEPOSIT"   ).reduce((s, e) => s + Math.abs(e.amount), 0);
+  const totalWithdrawals = events.filter(e => e.event_type?.toUpperCase() === "WITHDRAWAL").reduce((s, e) => s + Math.abs(e.amount), 0);
   const balance          = totalDeposits - totalWithdrawals;
 
-  if (loading) return <div style={css.loadingText}>Lade Transaktionshistorie…</div>;
+  if (eventsLoading) return <div style={css.loadingText}>Lade Transaktionshistorie…</div>;
 
   return (
     <div>
-      {error && <div style={css.errorText}>Fehler beim Laden: {error}</div>}
+      {eventsError && <div style={css.errorText}>Fehler beim Laden: {eventsError}</div>}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px", marginBottom: "20px" }}>
         {[
@@ -660,26 +718,26 @@ function HistoryView({ userId }) {
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
               <div style={{
                 width: "38px", height: "38px", borderRadius: "50%", flexShrink: 0,
-                background: ev.event_type === "deposit" ? COLORS.greenMuted : COLORS.redMuted,
+                background: ev.event_type?.toUpperCase() === "DEPOSIT" ? COLORS.greenMuted : COLORS.redMuted,
                 display: "flex", alignItems: "center", justifyContent: "center",
-                color: ev.event_type === "deposit" ? COLORS.greenText : COLORS.redText, fontSize: "16px",
+                color: ev.event_type?.toUpperCase() === "DEPOSIT" ? COLORS.greenText : COLORS.redText, fontSize: "16px",
               }}>
-                {ev.event_type === "deposit" ? "↑" : "↓"}
+                {ev.event_type?.toUpperCase() === "DEPOSIT" ? "↑" : "↓"}
               </div>
               <div>
                 <div style={{ fontSize: "14px", fontWeight: "600", color: COLORS.text }}>
-                  {ev.event_type === "deposit" ? "Einzahlung" : "Auszahlung"}
+                  {ev.event_type?.toUpperCase() === "DEPOSIT" ? "Einzahlung" : "Auszahlung"}
                 </div>
                 <div style={{ fontSize: "12px", color: COLORS.textMuted }}>
-                  {ev.created_at ? new Date(ev.created_at).toLocaleDateString("de-AT") : ""}
+                  {ev.occurred_at ? new Date(ev.occurred_at).toLocaleDateString("de-AT") : ""}
                 </div>
                 {ev.notes && (
                   <div style={{ fontSize: "12px", color: COLORS.textDim, marginTop: "2px" }}>{ev.notes}</div>
                 )}
               </div>
             </div>
-            <div style={{ fontSize: "18px", fontWeight: "800", color: ev.event_type === "deposit" ? COLORS.greenText : COLORS.redText }}>
-              {ev.event_type === "deposit" ? "+" : "-"}€{ev.amount.toFixed(2)}
+            <div style={{ fontSize: "18px", fontWeight: "800", color: ev.event_type?.toUpperCase() === "DEPOSIT" ? COLORS.greenText : COLORS.redText }}>
+              {ev.event_type?.toUpperCase() === "DEPOSIT" ? "+" : "-"}€{ev.amount.toFixed(2)}
             </div>
           </div>
         ))}
@@ -843,13 +901,12 @@ function SessionsView({ userId }) {
 // STATS VIEW
 // ─────────────────────────────────────────────────────────────────────────────
 
-function StatsView({ userId }) {
-  const { events }   = useBankrollEvents(userId);
+function StatsView({ userId, events }) {
   const { sessions } = useSessions(userId);
   const snapshots    = useSnapshots(userId);
 
-  const totalDeposits    = events.filter(e => e.event_type === "deposit").reduce((s, e) => s + e.amount, 0);
-  const totalWithdrawals = events.filter(e => e.event_type === "withdrawal").reduce((s, e) => s + e.amount, 0);
+  const totalDeposits    = events.filter(e => e.event_type?.toUpperCase() === "DEPOSIT"   ).reduce((s, e) => s + Math.abs(e.amount), 0);
+  const totalWithdrawals = events.filter(e => e.event_type?.toUpperCase() === "WITHDRAWAL").reduce((s, e) => s + Math.abs(e.amount), 0);
   const balance          = totalDeposits - totalWithdrawals;
 
   const profits  = sessions.map(s => s.profit).filter(p => p !== undefined);
@@ -879,7 +936,7 @@ function StatsView({ userId }) {
         {[
           { label: "Gesamt Bankroll",  value: `€${balance.toFixed(2)}`, color: "green" },
           { label: "Sessions gesamt",  value: sessions.length,           color: "text"  },
-          { label: "Deposits",         value: events.filter(e => e.event_type === "deposit").length, color: "text" },
+          { label: "Deposits",         value: events.filter(e => e.event_type?.toUpperCase() === "DEPOSIT").length, color: "text" },
           { label: "Gewinnrate",       value: `${winRate}%`,             color: "gold"  },
         ].map((item, i) => (
           <div key={i} style={css.statCard}>
@@ -959,7 +1016,27 @@ export default function PokerBankrollManager() {
   const [activeView, setActiveView] = useState("dashboard");
   const [user,       setUser]       = useState(null); // { id, username }
 
-  // ── Nicht eingeloggt → AuthScreen anzeigen ────────────────────────────────
+  // FIX 1 + 2 + 3: Events werden auf Hauptkomponenten-Ebene gehalten.
+  // → Kein /user/undefined-Request (Guard im Hook)
+  // → reloadEvents kann an alle Views weitergegeben werden (FIX 2)
+  // → handleLogout setzt Events sofort zurück (FIX 3)
+  const {
+    events,
+    loading: eventsLoading,
+    error:   eventsError,
+    reload:  reloadEvents,
+  } = useBankrollEvents(user?.id);
+
+  // FIX 3: Beim Abmelden wird user auf null gesetzt.
+  //        Der Hook reagiert auf user?.id → undefined und leert events[] sofort.
+  //        Kein anderer User sieht je die Transaktionen eines anderen Profils.
+  const handleLogout = () => {
+    setUser(null);
+    // events werden automatisch durch den Hook auf [] gesetzt,
+    // da user?.id nach setUser(null) undefined ist.
+  };
+
+  // Nicht eingeloggt → AuthScreen anzeigen
   if (!user) {
     return <AuthScreen onAuth={(u) => setUser(u)} />;
   }
@@ -968,12 +1045,50 @@ export default function PokerBankrollManager() {
 
   const renderView = () => {
     switch (activeView) {
-      case "dashboard":     return <DashboardView     userId={user.id} />;
-      case "transaktionen": return <TransaktionenView userId={user.id} onNavigate={setActiveView} />;
-      case "history":       return <HistoryView       userId={user.id} />;
-      case "sessions":      return <SessionsView      userId={user.id} />;
-      case "stats":         return <StatsView         userId={user.id} />;
-      default:              return <DashboardView     userId={user.id} />;
+      case "dashboard":
+        return (
+          <DashboardView
+            userId={user.id}
+            events={events}
+            eventsLoading={eventsLoading}
+            eventsError={eventsError}
+          />
+        );
+      case "transaktionen":
+        return (
+          <TransaktionenView
+            userId={user.id}
+            events={events}
+            reloadEvents={reloadEvents}    // FIX 2: Callback für sofortiges Neuladen
+            onNavigate={setActiveView}
+          />
+        );
+      case "history":
+        return (
+          <HistoryView
+            events={events}
+            eventsLoading={eventsLoading}
+            eventsError={eventsError}
+          />
+        );
+      case "sessions":
+        return <SessionsView userId={user.id} />;
+      case "stats":
+        return (
+          <StatsView
+            userId={user.id}
+            events={events}
+          />
+        );
+      default:
+        return (
+          <DashboardView
+            userId={user.id}
+            events={events}
+            eventsLoading={eventsLoading}
+            eventsError={eventsError}
+          />
+        );
     }
   };
 
@@ -1009,8 +1124,9 @@ export default function PokerBankrollManager() {
               <div style={{ fontSize: "10px", color: COLORS.textDim }}>ID #{user.id}</div>
             </div>
           </div>
+          {/* FIX 3: handleLogout statt inline setUser(null) */}
           <button
-            onClick={() => setUser(null)}
+            onClick={handleLogout}
             style={{
               width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
               gap: "6px", padding: "7px", borderRadius: "7px",

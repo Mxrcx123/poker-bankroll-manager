@@ -1,42 +1,48 @@
-# Überarbeitet von Andreas Haas & gelöst
+# Überarbeitet von Andreas Haas
+# ÄNDERUNG: Balance wird nach jedem Deposit neu berechnet und bei User gespeichert
 from sqlalchemy.orm import Session
 from model.deposit import Deposit
-from model.bankroll_events import BankrollEvent  # <-- NEU: Importiert das Bankroll-Event-Model
+from model.bankroll_events import BankrollEvent
 from schema.deposit_schema import DepositCreate, DepositUpdate
+from services import balance_service
 from datetime import datetime
+
 
 class DepositCrud:
 
     @staticmethod
     def create_deposit(db: Session, deposit: DepositCreate):
-        # Datum sauber verarbeiten (Falls es ein reines 'date' ist, zu 'datetime' konvertieren)
         event_date = datetime.now()
         if deposit.date:
             event_date = datetime.combine(deposit.date, datetime.min.time())
 
-        # 1. Eintrag für die "deposits"-Tabelle erstellen
+        # 1. Deposit-Eintrag erstellen
         db_deposit = Deposit(
             user_id=deposit.user_id,
             amount=deposit.amount,
-            date=event_date,   
+            date=event_date,
             notes=deposit.notes
         )
         db.add(db_deposit)
 
-        # 2. NEU: Eintrag für die "bankroll_events"-Tabelle erstellen, damit sich die Balance ändert!
+        # 2. BankrollEvent mit positivem Betrag → erhöht die Balance
         db_event = BankrollEvent(
             user_id=deposit.user_id,
-            amount=deposit.amount,         # Positiver Betrag erhöht die Bankroll
-            event_type="DEPOSIT",          # Typ, damit dein Dashboard weiß, woher das Geld kommt
+            amount=deposit.amount,
+            event_type="DEPOSIT",
             occurred_at=event_date,
             notes=deposit.notes or "Einzahlung erfasst"
         )
         db.add(db_event)
 
-        # 3. Beide Einträge gleichzeitig in die Datenbank committen
+        # 3. Balance aus BankrollEvents berechnen (SQLAlchemy flusht vor der Query,
+        #    daher wird das neue Event bereits mitzgezählt) und user.balance setzen
+        balance_service.update_balance_no_commit(db, deposit.user_id)
+
+        # 4. Alles auf einmal committen: Deposit + BankrollEvent + user.balance
         db.commit()
         db.refresh(db_deposit)
-        
+
         return db_deposit
 
     @staticmethod
