@@ -1,12 +1,10 @@
-from crud.withdrawal_crud import db_withdrawals
+# Überarbeitet
+# BUG FIX: war hardcoded auf 1000, kannte keine user_id, ignorierte Deposits
+# ÄNDERUNG: delegiert jetzt an balance_service (user.balance)
+from sqlalchemy.orm import Session
+from services.balance_service import get_current_bankroll, recalculate_balance
 
+# get_current_bankroll(db, user_id) → float  (aus user.balance)
+# recalculate_balance(db, user_id) → float   (neu berechnen + committen)
 
-def get_current_bankroll(db, user_id):
-    base_bankroll = 1000     # jetzt Startwert (später aus DB berechnen)
-
-    total_withdrawals = sum(
-        w.amount for w in db_withdrawals.values()
-        if getattr(w, "user_id", None) == user_id
-    )
-
-    return base_bankroll - total_withdrawals
+__all__ = ["get_current_bankroll", "recalculate_balance"]

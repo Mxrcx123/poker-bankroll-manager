@@ -87,16 +87,18 @@ function FormField({ label, icon, error, children }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Props:
-//   onSuccess(newEvent)  — wird nach dem Speichern aufgerufen
-//   onCancel()           — optional, zeigt Abbrechen-Button
+//   userId    — Pflicht! Kommt vom eingeloggten User (aus AuthScreen)
+//   onSuccess(formData) — wird AWAITED; wirft bei API-Fehler
+//   onCancel()          — optional
 // ─────────────────────────────────────────────────────────────────────────────
-export default function AddDeposit({ onSuccess, onCancel }) {
-  const [amount,  setAmount]  = useState("");
-  const [date,    setDate]    = useState(getTodayString());
-  const [notes,   setNotes]   = useState("");
-  const [errors,  setErrors]  = useState({});
-  const [status,  setStatus]  = useState("idle");
-  const [touched, setTouched] = useState({});
+export default function AddDeposit({ userId, onSuccess, onCancel }) {
+  const [amount,   setAmount]   = useState("");
+  const [date,     setDate]     = useState(getTodayString());
+  const [notes,    setNotes]    = useState("");
+  const [errors,   setErrors]   = useState({});
+  const [status,   setStatus]   = useState("idle");
+  const [touched,  setTouched]  = useState({});
+  const [apiError, setApiError] = useState("");
 
   function handleBlur(field) {
     setTouched((p) => ({ ...p, [field]: true }));
@@ -104,41 +106,40 @@ export default function AddDeposit({ onSuccess, onCancel }) {
   }
 
   async function handleSubmit() {
+    // Fehlende userId sofort sichtbar machen
+    if (!userId) {
+      setApiError("Kein eingeloggter Benutzer gefunden. Bitte neu anmelden.");
+      return;
+    }
+
     setTouched({ amount: true, date: true });
     const errs = validateForm(amount, date);
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
 
     setStatus("loading");
+    setApiError("");
 
-    // ── API-Platzhalter — später ersetzen ──────────────────────────────────
-    // const res = await fetch("/api/bankroll-events", {
-    //   method: "POST",
-    //   headers: { "Content-Type": "application/json" },
-    //   body: JSON.stringify({ type: "deposit", amount: parseFloat(amount), date, notes }),
-    // });
-    // const savedEvent = await res.json();
-    // ──────────────────────────────────────────────────────────────────────
-    await new Promise((r) => setTimeout(r, 700));
-
-    const newEvent = {
-      id: Date.now(),
-      type: "deposit",
-      amount: parseFloat(amount),
-      date,
-      notes: notes.trim(),
-    };
-
-    setStatus("success");
-    setTimeout(() => {
+    try {
+      await onSuccess({
+        user_id: userId,   // ← wird jetzt korrekt mitgeschickt
+        amount:  parseFloat(amount),
+        date,
+        notes:   notes.trim() || null,
+      });
+      setStatus("success");
+      setTimeout(() => {
+        setStatus("idle");
+        setAmount("");
+        setDate(getTodayString());
+        setNotes("");
+        setTouched({});
+        setErrors({});
+      }, 1400);
+    } catch (e) {
+      setApiError(e.message ?? "Fehler beim Speichern.");
       setStatus("idle");
-      setAmount("");
-      setDate(getTodayString());
-      setNotes("");
-      setTouched({});
-      setErrors({});
-      if (onSuccess) onSuccess(newEvent);
-    }, 1400);
+    }
   }
 
   const inputStyle = (hasError) => ({
@@ -189,6 +190,12 @@ export default function AddDeposit({ onSuccess, onCancel }) {
           Einzahlung erfassen
         </div>
       </div>
+
+      {apiError && (
+        <div style={{ fontSize: "12px", color: COLORS.redText, background: "#450a0a", borderRadius: "8px", padding: "10px 12px", marginBottom: "14px" }}>
+          ⚠ {apiError}
+        </div>
+      )}
 
       <FormField label="Betrag" icon={<EuroIcon />} error={touched.amount && errors.amount}>
         <div style={{ position: "relative" }}>

@@ -1,6 +1,8 @@
+#Überarbeitet von Andreas Haas
 from sqlalchemy import Column, Integer, Text, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
-from .base import Base, now
+from .base import Base
+from datetime import datetime
 
 
 class Session(Base):
@@ -10,7 +12,7 @@ class Session(Base):
     user_id = Column(Integer, ForeignKey("users.id", onupdate="CASCADE", ondelete="CASCADE"), nullable=False)
     game_mode_id = Column(Integer, ForeignKey("game_modes.id", onupdate="CASCADE", ondelete="RESTRICT"), nullable=False)
     platform_id = Column(Integer, ForeignKey("platforms.id", onupdate="CASCADE", ondelete="SET NULL"), nullable=True)
-    started_at = Column(DateTime(timezone=True), nullable=False, default=now)
+    started_at = Column(DateTime(timezone=True), nullable=False, default=datetime.now)
     ended_at = Column(DateTime(timezone=True), nullable=True)
     notes = Column(Text, nullable=True)
 

@@ -1,5 +1,8 @@
+# Überarbeitet von Andreas Haas
+# ÄNDERUNG: balance zu UserResponse hinzugefügt
 from pydantic import BaseModel, Field
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
 
@@ -36,6 +39,7 @@ class UserResponse(BaseModel):
     id: int
     username: str
     created_at: datetime
+    balance: Decimal  # NEU: aktuelle Bankroll-Balance
 
     class Config:
         from_attributes = True
@@ -43,6 +47,7 @@ class UserResponse(BaseModel):
             "example": {
                 "id": 1,
                 "username": "pokerguy",
-                "created_at": "2026-04-08T12:00:00+00:00"
+                "created_at": "2026-04-08T12:00:00+00:00",
+                "balance": "1500.00"
             }
         }
