@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import AddDeposit from "./AddDeposit.jsx";
 import RecordWithdrawal from "./RecordWithdrawl.jsx";
-import CreateSession from "./CreateSession.jsx";
 import AuthScreen from "./AuthScreen.jsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -29,7 +28,6 @@ const api = {
     apiFetch(`/bankroll-event/user/${userId}`),
 
   // Deposit via deposit_api.py → POST /deposits/ mit JSON-Body
-  // Erstellt Deposit-Eintrag + BankrollEvent + aktualisiert user.balance
   createDeposit: (userId, amount, notes = "") =>
     apiFetch(`/deposits/`, {
       method: "POST",
@@ -37,7 +35,6 @@ const api = {
     }),
 
   // Withdrawal via withdrawal_api.py → POST /withdrawals/ mit JSON-Body
-  // Erstellt Withdrawal-Eintrag + BankrollEvent (negativer Betrag) + aktualisiert user.balance
   createWithdrawal: (userId, amount, notes = "") =>
     apiFetch(`/withdrawals/`, {
       method: "POST",
@@ -92,9 +89,10 @@ const api = {
   },
 
   // ── Lookup-Daten ───────────────────────────────────────────────────────────
-  getPlatforms:  ()       => apiFetch(`/platform/all`),
-  getGameModes:  ()       => apiFetch(`/game-mode/all`),
-  getSnapshots:  (userId) => apiFetch(`/bankroll-snapshot/user/${userId}`),
+  getPlatforms:   ()       => apiFetch(`/platform/all`),
+  createPlatform: (name)   => apiFetch(`/platform/${encodeURIComponent(name)}`, { method: "POST" }),
+  getGameModes:   ()       => apiFetch(`/game-mode/all`),
+  getSnapshots:   (userId) => apiFetch(`/bankroll-snapshot/user/${userId}`),
 };
 
 const GAME_MODE_ID = { cashgame: 1, tournament: 2 };
@@ -103,17 +101,14 @@ const GAME_MODE_ID = { cashgame: 1, tournament: 2 };
 // HOOKS
 // ─────────────────────────────────────────────────────────────────────────────
 
-// FIX 1: Guard gegen undefined/null userId — verhindert /bankroll-event/user/undefined
-// FIX 3: Setzt Events auf [] zurück wenn userId wegfällt (Logout)
 function useBankrollEvents(userId) {
   const [events,  setEvents]  = useState([]);
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState(null);
 
   const load = useCallback(async () => {
-    // FIX 1: Blockiert Fetch solange kein gültiger User — kein Request an /user/undefined
     if (!userId) {
-      setEvents([]);   // FIX 3: State bei Logout/kein User sofort leeren
+      setEvents([]);
       setLoading(false);
       return;
     }
@@ -121,7 +116,6 @@ function useBankrollEvents(userId) {
       setLoading(true);
       setError(null);
       const data = await api.getBankrollEvents(userId);
-      // FIX 1: API gibt "bankroll_events" zurück, nicht "events"
       setEvents(data.bankroll_events ?? data.events ?? []);
     } catch (e) {
       setError(e.message);
@@ -140,7 +134,6 @@ function useSessions(userId) {
   const [error,    setError]    = useState(null);
 
   const load = useCallback(async () => {
-    // FIX 1: Guard gegen undefined userId
     if (!userId) {
       setSessions([]);
       setLoading(false);
@@ -190,7 +183,6 @@ function useSessions(userId) {
 function useSnapshots(userId) {
   const [snapshots, setSnapshots] = useState([]);
   useEffect(() => {
-    // FIX 1: Guard gegen undefined userId
     if (!userId) { setSnapshots([]); return; }
     api.getSnapshots(userId)
       .then(data => setSnapshots(data.snapshots ?? []))
@@ -199,14 +191,22 @@ function useSnapshots(userId) {
   return snapshots;
 }
 
+// usePlatforms gibt jetzt { platforms, reload } zurück
+// reload() wird nach dem Erstellen einer neuen Plattform aufgerufen
 function usePlatforms() {
   const [platforms, setPlatforms] = useState([]);
-  useEffect(() => {
-    api.getPlatforms()
-      .then(data => setPlatforms(data.platforms ?? []))
-      .catch(() => setPlatforms([]));
+
+  const load = useCallback(async () => {
+    try {
+      const data = await api.getPlatforms();
+      setPlatforms(data.platforms ?? []);
+    } catch {
+      setPlatforms([]);
+    }
   }, []);
-  return platforms;
+
+  useEffect(() => { load(); }, [load]);
+  return { platforms, reload: load };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -358,6 +358,7 @@ const css = {
     padding: "8px 16px", borderRadius: "8px",
     background: COLORS.green, color: "#0d1520",
     fontSize: "13px", fontWeight: "700", border: "none", cursor: "pointer",
+    fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
   },
   btnSecondary: {
     display: "flex", alignItems: "center", gap: "6px",
@@ -365,6 +366,7 @@ const css = {
     background: "transparent", color: COLORS.textMuted,
     fontSize: "13px", fontWeight: "500",
     border: `1px solid ${COLORS.border}`, cursor: "pointer",
+    fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
   },
   content:  { flex: 1, padding: "24px 28px", overflowY: "auto" },
   grid4:    { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px", marginBottom: "20px" },
@@ -468,17 +470,373 @@ function BankrollChart({ data }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SESSION CREATE FORM
+// Ersetzt den externen CreateSession-Import. Enthält:
+//   • Spielmodus-Toggle (Cash / Turnier)
+//   • Plattform-Select mit Inline-Erstellen einer neuen Plattform
+//   • Modus-spezifische Felder (Buy-in, Cash-out / Fee, Rebuys, Add-ons, Gewinn)
+//   • Notiz-Feld
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SessionCreateForm({ platforms, reloadPlatforms, onSuccess, onCancel }) {
+  const [gameMode,         setGameMode]         = useState("cashgame");
+  const [selectValue,      setSelectValue]      = useState("");
+  const [platformId,       setPlatformId]       = useState(null);
+  const [showNewPlatform,  setShowNewPlatform]  = useState(false);
+  const [newPlatformName,  setNewPlatformName]  = useState("");
+  const [creatingPlatform, setCreatingPlatform] = useState(false);
+  const [platformSuccess,  setPlatformSuccess]  = useState("");
+
+  const [buyIn,    setBuyIn]    = useState("");
+  const [cashOut,  setCashOut]  = useState("");
+  const [fee,      setFee]      = useState("");
+  const [rebuys,   setRebuys]   = useState("");
+  const [addons,   setAddons]   = useState("");
+  const [winnings, setWinnings] = useState("");
+  const [notes,    setNotes]    = useState("");
+
+  const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState(null);
+
+  // Nach dem Reload der Plattformen die neu erstellte automatisch auswählen
+  const pendingSelectRef = useRef(null);
+  useEffect(() => {
+    if (pendingSelectRef.current) {
+      const created = platforms.find(p => p.name === pendingSelectRef.current);
+      if (created) {
+        setPlatformId(created.id);
+        setSelectValue(String(created.id));
+        pendingSelectRef.current = null;
+      }
+    }
+  }, [platforms]);
+
+  const handlePlatformSelectChange = (e) => {
+    const val = e.target.value;
+    if (val === "__new__") {
+      setShowNewPlatform(true);
+      setSelectValue("__new__");
+      setPlatformId(null);
+      setPlatformSuccess("");
+    } else {
+      setSelectValue(val);
+      setPlatformId(val ? Number(val) : null);
+      setShowNewPlatform(false);
+    }
+  };
+
+  const handleCancelNewPlatform = () => {
+    setShowNewPlatform(false);
+    setNewPlatformName("");
+    setSelectValue("");
+    setPlatformId(null);
+  };
+
+  const handleCreatePlatform = async () => {
+    const trimmed = newPlatformName.trim();
+    if (!trimmed) return;
+    setCreatingPlatform(true);
+    setError(null);
+    try {
+      const result = await api.createPlatform(trimmed);
+      if (result.error) throw new Error(result.error);
+      pendingSelectRef.current = trimmed;
+      setNewPlatformName("");
+      setShowNewPlatform(false);
+      setPlatformSuccess(`„${trimmed}" erstellt`);
+      await reloadPlatforms();
+    } catch (e) {
+      setError(`Plattform konnte nicht erstellt werden: ${e.message}`);
+    } finally {
+      setCreatingPlatform(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    setError(null);
+    const bIn = parseFloat(buyIn);
+    if (!buyIn || isNaN(bIn) || bIn <= 0) {
+      setError("Bitte einen gültigen Buy-in eingeben.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSuccess({
+        game_mode:   gameMode,
+        platform_id: platformId,
+        notes:       notes.trim() || null,
+        buy_in:      bIn,
+        cash_out:    cashOut  !== "" ? parseFloat(cashOut)  : null,
+        fee:         fee      !== "" ? parseFloat(fee)      : null,
+        rebuys:      rebuys   !== "" ? parseFloat(rebuys)   : null,
+        addons:      addons   !== "" ? parseFloat(addons)   : null,
+        winnings:    winnings !== "" ? parseFloat(winnings) : 0,
+      });
+      onCancel(); // Formular nach Erfolg schließen
+    } catch (e) {
+      setError(e.message);
+      setSaving(false);
+    }
+  };
+
+  // Gemeinsame Input-Stile (passend zum bestehenden Dark-Design)
+  const field = {
+    background:   COLORS.surface,
+    border:       `1px solid ${COLORS.border}`,
+    borderRadius: "8px",
+    padding:      "9px 12px",
+    color:        COLORS.text,
+    fontSize:     "13px",
+    fontFamily:   "'DM Sans', 'Segoe UI', sans-serif",
+    width:        "100%",
+    outline:      "none",
+    boxSizing:    "border-box",
+  };
+
+  // Select mit eigenem Chevron-Pfeil
+  const chevron = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%237a9cc4' stroke-width='2' viewBox='0 0 24 24'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C%2Fsvg%3E")`;
+  const selectField = {
+    ...field,
+    cursor:             "pointer",
+    appearance:         "none",
+    WebkitAppearance:   "none",
+    backgroundImage:    chevron,
+    backgroundRepeat:   "no-repeat",
+    backgroundPosition: "right 12px center",
+    paddingRight:       "36px",
+  };
+
+  const lbl = {
+    display:       "block",
+    fontSize:      "11px",
+    letterSpacing: "0.07em",
+    textTransform: "uppercase",
+    color:         COLORS.textDim,
+    fontWeight:    "600",
+    marginBottom:  "6px",
+  };
+
+  return (
+    <div style={{ ...css.card, marginBottom: "20px", border: `1px solid ${COLORS.borderLight}` }}>
+      <div style={{ fontSize: "15px", fontWeight: "700", color: COLORS.text, marginBottom: "18px" }}>
+        Neue Session erfassen
+      </div>
+
+      {error && (
+        <div style={{
+          padding: "10px 14px", borderRadius: "8px", marginBottom: "14px",
+          background: COLORS.redMuted, border: `1px solid ${COLORS.red}40`,
+          color: COLORS.redText, fontSize: "13px",
+        }}>
+          {error}
+        </div>
+      )}
+
+      {/* ── Spielmodus ── */}
+      <div style={{ marginBottom: "14px" }}>
+        <span style={lbl}>Spielmodus</span>
+        <div style={{ display: "flex", gap: "8px" }}>
+          {[["cashgame", "Cash Game"], ["tournament", "Turnier"]].map(([val, label]) => (
+            <button
+              key={val}
+              onClick={() => setGameMode(val)}
+              style={{
+                flex: 1, padding: "9px 12px", borderRadius: "8px",
+                cursor: "pointer", border: "none",
+                fontSize: "13px", fontWeight: "600",
+                fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
+                transition: "all 0.15s",
+                background: gameMode === val
+                  ? (val === "cashgame" ? COLORS.greenMuted : COLORS.goldMuted)
+                  : COLORS.surface,
+                color: gameMode === val
+                  ? (val === "cashgame" ? COLORS.greenText : COLORS.goldText)
+                  : COLORS.textMuted,
+                outline: gameMode === val
+                  ? `1px solid ${val === "cashgame" ? COLORS.green + "50" : COLORS.gold + "50"}`
+                  : `1px solid ${COLORS.border}`,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Plattform ── */}
+      <div style={{ marginBottom: "14px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+          <span style={{ ...lbl, marginBottom: 0 }}>Plattform</span>
+          {platformSuccess && (
+            <span style={{ fontSize: "11px", color: COLORS.greenText, display: "flex", alignItems: "center", gap: "4px" }}>
+              <span>✓</span> {platformSuccess}
+            </span>
+          )}
+        </div>
+
+        <select
+          value={selectValue}
+          onChange={handlePlatformSelectChange}
+          style={selectField}
+        >
+          <option value="">— Keine Plattform —</option>
+          {platforms.map(p => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+          <option disabled style={{ color: COLORS.textDim }}>────────────────</option>
+          <option value="__new__">＋ Neue Plattform erstellen …</option>
+        </select>
+
+        {/* Inline-Eingabe für neue Plattform */}
+        {showNewPlatform && (
+          <div style={{
+            display: "flex", gap: "8px", marginTop: "8px", alignItems: "stretch",
+            padding: "12px",
+            background: `${COLORS.green}08`,
+            border: `1px solid ${COLORS.green}25`,
+            borderRadius: "8px",
+          }}>
+            <input
+              value={newPlatformName}
+              onChange={e => { setNewPlatformName(e.target.value); setPlatformSuccess(""); }}
+              onKeyDown={e => {
+                if (e.key === "Enter") handleCreatePlatform();
+                if (e.key === "Escape") handleCancelNewPlatform();
+              }}
+              placeholder="Plattform-Name, z.B. PokerStars"
+              style={{ ...field, flex: 1 }}
+              autoFocus
+            />
+            <button
+              onClick={handleCreatePlatform}
+              disabled={!newPlatformName.trim() || creatingPlatform}
+              style={{
+                ...css.btnPrimary,
+                whiteSpace: "nowrap",
+                padding: "9px 16px",
+                opacity: (!newPlatformName.trim() || creatingPlatform) ? 0.45 : 1,
+                cursor: (!newPlatformName.trim() || creatingPlatform) ? "not-allowed" : "pointer",
+              }}
+            >
+              {creatingPlatform ? "…" : "Erstellen"}
+            </button>
+            <button
+              onClick={handleCancelNewPlatform}
+              style={{ ...css.btnSecondary, padding: "9px 12px" }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Cash Game Felder ── */}
+      {gameMode === "cashgame" && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "14px" }}>
+          <div>
+            <span style={lbl}>Buy-in (€) *</span>
+            <input
+              type="number" min="0" step="0.01"
+              value={buyIn} onChange={e => setBuyIn(e.target.value)}
+              placeholder="0.00" style={field}
+            />
+          </div>
+          <div>
+            <span style={lbl}>Cash-out (€)</span>
+            <input
+              type="number" min="0" step="0.01"
+              value={cashOut} onChange={e => setCashOut(e.target.value)}
+              placeholder="0.00" style={field}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Turnier Felder ── */}
+      {gameMode === "tournament" && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+            <div>
+              <span style={lbl}>Buy-in (€) *</span>
+              <input
+                type="number" min="0" step="0.01"
+                value={buyIn} onChange={e => setBuyIn(e.target.value)}
+                placeholder="0.00" style={field}
+              />
+            </div>
+            <div>
+              <span style={lbl}>Fee (€)</span>
+              <input
+                type="number" min="0" step="0.01"
+                value={fee} onChange={e => setFee(e.target.value)}
+                placeholder="0.00" style={field}
+              />
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "14px" }}>
+            <div>
+              <span style={lbl}>Rebuys (€)</span>
+              <input
+                type="number" min="0" step="0.01"
+                value={rebuys} onChange={e => setRebuys(e.target.value)}
+                placeholder="0.00" style={field}
+              />
+            </div>
+            <div>
+              <span style={lbl}>Add-ons (€)</span>
+              <input
+                type="number" min="0" step="0.01"
+                value={addons} onChange={e => setAddons(e.target.value)}
+                placeholder="0.00" style={field}
+              />
+            </div>
+            <div>
+              <span style={lbl}>Gewinn (€)</span>
+              <input
+                type="number" min="0" step="0.01"
+                value={winnings} onChange={e => setWinnings(e.target.value)}
+                placeholder="0.00" style={field}
+              />
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Notiz ── */}
+      <div style={{ marginBottom: "18px" }}>
+        <span style={lbl}>Notiz</span>
+        <input
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          placeholder="Optionale Anmerkung …"
+          style={field}
+        />
+      </div>
+
+      {/* ── Aktionen ── */}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+        <button onClick={onCancel} style={css.btnSecondary}>Abbrechen</button>
+        <button
+          onClick={handleSubmit}
+          disabled={saving}
+          style={{ ...css.btnPrimary, opacity: saving ? 0.6 : 1, cursor: saving ? "not-allowed" : "pointer" }}
+        >
+          {saving ? "Speichert …" : "Session speichern"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // VIEWS
-// FIX 2: Alle Views erhalten events + reloadEvents als Props von der Hauptkomponente.
-//         Dadurch wird nach jeder Transaktion die Liste appweit aktualisiert,
-//         egal in welcher View man sich gerade befindet.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function DashboardView({ userId, events, eventsLoading, eventsError }) {
   const { sessions, loading: sessLoading } = useSessions(userId);
+  const { platforms } = usePlatforms();
   const snapshots = useSnapshots(userId);
 
-  // Math.abs(): withdrawal_crud speichert negative Betraege → abs() macht die Berechnung robust
   const totalDeposits    = events.filter(e => e.event_type?.toUpperCase() === "DEPOSIT"   ).reduce((s, e) => s + Math.abs(e.amount), 0);
   const totalWithdrawals = events.filter(e => e.event_type?.toUpperCase() === "WITHDRAWAL").reduce((s, e) => s + Math.abs(e.amount), 0);
   const balance          = totalDeposits - totalWithdrawals;
@@ -586,7 +944,9 @@ function DashboardView({ userId, events, eventsLoading, eventsError }) {
                   {s.started_at ? new Date(s.started_at).toLocaleDateString("de-AT").slice(0, 5) : "—"}
                 </div>
                 <div><span style={css.tag(s.game_mode === "cashgame" ? "green" : "gold")}>{s.game_mode === "cashgame" ? "Cash" : "Turnier"}</span></div>
-                <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{s.platform_id ?? "—"}</div>
+                <div style={{ fontSize: "12px", color: COLORS.textMuted }}>
+                  {platforms.find(p => p.id === s.platform_id)?.name ?? (s.platform_id ? `#${s.platform_id}` : "—")}
+                </div>
                 <div style={{ fontSize: "12px", color: COLORS.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.notes || "—"}</div>
                 <div style={{ display: "flex", alignItems: "center", gap: "4px", ...css.profit(s.profit) }}>
                   {s.profit >= 0 ? <Icon.TrendUp /> : <Icon.TrendDown />}
@@ -603,14 +963,11 @@ function DashboardView({ userId, events, eventsLoading, eventsError }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TRANSAKTIONEN VIEW
-// FIX 2: reloadEvents kommt von der Hauptkomponente — aktualisiert alle Views
 // ─────────────────────────────────────────────────────────────────────────────
 
 function TransaktionenView({ userId, events, reloadEvents, onNavigate }) {
-  const [notification, setNotification] = useState(null); // { type: "success"|"error", msg: string }
+  const [notification, setNotification] = useState(null);
 
-  // Withdrawal-Betraege werden in withdrawal_crud mit negativem Vorzeichen gespeichert
-  // Math.abs() stellt sicher, dass die Berechnung korrekt ist egal ob + oder -
   const totalDeposits    = events.filter(e => e.event_type?.toUpperCase() === "DEPOSIT"   ).reduce((s, e) => s + Math.abs(e.amount), 0);
   const totalWithdrawals = events.filter(e => e.event_type?.toUpperCase() === "WITHDRAWAL").reduce((s, e) => s + Math.abs(e.amount), 0);
   const currentBankroll  = totalDeposits - totalWithdrawals;
@@ -620,8 +977,6 @@ function TransaktionenView({ userId, events, reloadEvents, onNavigate }) {
     setTimeout(() => setNotification(null), 3500);
   }
 
-  // try/finally garantiert: reloadEvents() wird IMMER aufgerufen,
-  // auch wenn api.createDeposit() einen Fehler wirft.
   async function handle_deposit_success(formData) {
     try {
       await api.createDeposit(userId, formData.amount, formData.notes ?? "");
@@ -782,10 +1137,10 @@ function DeleteConfirmModal({ session, onConfirm, onCancel }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SessionsView({ userId }) {
-  const { sessions, loading, error, reload } = useSessions(userId);
-  const platforms = usePlatforms();
-  const [showCreateForm,  setShowCreateForm]  = useState(false);
-  const [sessionToDelete, setSessionToDelete] = useState(null);
+  const { sessions, loading, error, reload }           = useSessions(userId);
+  const { platforms, reload: reloadPlatforms }         = usePlatforms();
+  const [showCreateForm,  setShowCreateForm]           = useState(false);
+  const [sessionToDelete, setSessionToDelete]          = useState(null);
 
   const handleAddSession = async (formData) => {
     const game_mode_id = GAME_MODE_ID[formData.game_mode] ?? 1;
@@ -843,8 +1198,9 @@ function SessionsView({ userId }) {
             <Icon.Plus /> Neue Session erfassen
           </button>
         ) : (
-          <CreateSession
+          <SessionCreateForm
             platforms={platforms}
+            reloadPlatforms={reloadPlatforms}
             onSuccess={handleAddSession}
             onCancel={() => setShowCreateForm(false)}
           />
@@ -875,7 +1231,7 @@ function SessionsView({ userId }) {
                 </div>
                 <div><span style={css.tag(s.game_mode === "cashgame" ? "green" : "gold")}>{s.game_mode === "cashgame" ? "Cash" : "Turnier"}</span></div>
                 <div style={{ fontSize: "12px", color: COLORS.textMuted }}>
-                  {platforms.find(p => p.id === s.platform_id)?.name ?? s.platform_id ?? "—"}
+                  {platforms.find(p => p.id === s.platform_id)?.name ?? (s.platform_id ? `#${s.platform_id}` : "—")}
                 </div>
                 <div style={{ fontSize: "12px", color: COLORS.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.notes || "—"}</div>
                 <div style={{ display: "flex", alignItems: "center", gap: "4px", ...css.profit(s.profit) }}>
@@ -1014,12 +1370,8 @@ const VIEW_META = {
 
 export default function PokerBankrollManager() {
   const [activeView, setActiveView] = useState("dashboard");
-  const [user,       setUser]       = useState(null); // { id, username }
+  const [user,       setUser]       = useState(null);
 
-  // FIX 1 + 2 + 3: Events werden auf Hauptkomponenten-Ebene gehalten.
-  // → Kein /user/undefined-Request (Guard im Hook)
-  // → reloadEvents kann an alle Views weitergegeben werden (FIX 2)
-  // → handleLogout setzt Events sofort zurück (FIX 3)
   const {
     events,
     loading: eventsLoading,
@@ -1027,16 +1379,10 @@ export default function PokerBankrollManager() {
     reload:  reloadEvents,
   } = useBankrollEvents(user?.id);
 
-  // FIX 3: Beim Abmelden wird user auf null gesetzt.
-  //        Der Hook reagiert auf user?.id → undefined und leert events[] sofort.
-  //        Kein anderer User sieht je die Transaktionen eines anderen Profils.
   const handleLogout = () => {
     setUser(null);
-    // events werden automatisch durch den Hook auf [] gesetzt,
-    // da user?.id nach setUser(null) undefined ist.
   };
 
-  // Nicht eingeloggt → AuthScreen anzeigen
   if (!user) {
     return <AuthScreen onAuth={(u) => setUser(u)} />;
   }
@@ -1059,7 +1405,7 @@ export default function PokerBankrollManager() {
           <TransaktionenView
             userId={user.id}
             events={events}
-            reloadEvents={reloadEvents}    // FIX 2: Callback für sofortiges Neuladen
+            reloadEvents={reloadEvents}
             onNavigate={setActiveView}
           />
         );
@@ -1124,7 +1470,6 @@ export default function PokerBankrollManager() {
               <div style={{ fontSize: "10px", color: COLORS.textDim }}>ID #{user.id}</div>
             </div>
           </div>
-          {/* FIX 3: handleLogout statt inline setUser(null) */}
           <button
             onClick={handleLogout}
             style={{
