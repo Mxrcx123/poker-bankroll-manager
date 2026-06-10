@@ -9,6 +9,9 @@ from model.user import User
 from api.bankrollEventCrud_api import app
 from crud.bankrollEventCrud import BankrollEventCrud
 
+# Test für User Story 5: Delete Bankroll Event
+# Autor: Katharina Almer
+
 
 @pytest.fixture
 def test_db():
