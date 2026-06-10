@@ -2,30 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import AddDeposit from "./AddDeposit.jsx";
 import RecordWithdrawal from "./RecordWithdrawl.jsx";
 import CreateSession from "./CreateSession.jsx";
-<<<<<<< HEAD
-import * as sessionsApi from "../services/sessionsApi.js";
-import * as bankrollApi from "../services/bankrollApi.js";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MOCK DATA — Fallback wenn API nicht erreichbar
-// ─────────────────────────────────────────────────────────────────────────────
-
-const MOCK_STATS = {
-  totalSessions: 0,
-  winRate: 0,
-  avgProfit: 0,
-  bestSession: 0,
-  worstSession: -0,
-  totalHours: 0,
-};
-
-const MOCK_BANKROLL_EVENTS = [];
-
-// Fallback Chart-Daten (leer oder minimal)
-const MOCK_CHART_DATA = [
-  { label: "Jan", value: 0 },
-];
-=======
 import AuthScreen from "./AuthScreen.jsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,16 +98,11 @@ const api = {
 };
 
 const GAME_MODE_ID = { cashgame: 1, tournament: 2 };
->>>>>>> main
 
 const DEFAULT_USER_ID = 1; // Default user ID (später aus Auth)
 
 // ─────────────────────────────────────────────────────────────────────────────
-<<<<<<< HEAD
-// LOCALSTORAGE HELPERS — für Caching und Offline-Unterstützung
-=======
 // HOOKS
->>>>>>> main
 // ─────────────────────────────────────────────────────────────────────────────
 
 // FIX 1: Guard gegen undefined/null userId — verhindert /bankroll-event/user/undefined
@@ -218,36 +189,6 @@ function useSessions(userId) {
   return { sessions, loading, error, reload: load };
 }
 
-<<<<<<< HEAD
-// Synchrone Funktion - liest nur localStorage
-function loadSessionsSync() {
-  try {
-    const raw = localStorage.getItem("bankroll_sessions");
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-// Asynchrone Funktion - lädt von API, speichert in localStorage
-async function loadSessionsAsync() {
-  try {
-    const sessions = await sessionsApi.getSessionsByUser(DEFAULT_USER_ID);
-    if (sessions && sessions.length > 0) {
-      localStorage.setItem("bankroll_sessions", JSON.stringify(sessions));
-      return sessions;
-    }
-  } catch (error) {
-    console.warn("API nicht erreichbar, verwende Cache:", error);
-  }
-  
-  // Fallback auf lokale Daten
-  return loadSessionsSync();
-}
-
-function saveSessions(sessions) {
-  localStorage.setItem("bankroll_sessions", JSON.stringify(sessions));
-=======
 function useSnapshots(userId) {
   const [snapshots, setSnapshots] = useState([]);
   useEffect(() => {
@@ -268,7 +209,6 @@ function usePlatforms() {
       .catch(() => setPlatforms([]));
   }, []);
   return platforms;
->>>>>>> main
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -635,17 +575,6 @@ function BankrollChart({ data }) {
 //         egal in welcher View man sich gerade befindet.
 // ─────────────────────────────────────────────────────────────────────────────
 
-<<<<<<< HEAD
-function DashboardView() {
-  // Dashboard liest Balance aus Transaktionen + Sessions (initial sync)
-  const [sessions, setSessions] = useState(() => loadSessionsSync());
-  const [chartData, setChartData] = useState(() => generateChartData(loadEvents(), loadSessionsSync()));
-  const events = loadEvents();
-  const balance = getCurrentBankroll();
-  const depositsWithdrawals = events.reduce((s, e) => e.type === "deposit" ? s + e.amount : s - e.amount, 0);
-  const sessionProfit = sessions.reduce((s, session) => s + (session.profit || 0), 0);
-  const profitPositive = balance >= 0;
-=======
 function DashboardView({ userId, events, eventsLoading, eventsError }) {
   const { sessions, loading: sessLoading } = useSessions(userId);
   const snapshots = useSnapshots(userId);
@@ -668,20 +597,19 @@ function DashboardView({ userId, events, eventsLoading, eventsError }) {
 
   if (eventsLoading) return <div style={css.loadingText}>Lade Bankroll-Daten…</div>;
   if (eventsError)   return <div style={css.errorText}>Fehler: {eventsError}</div>;
->>>>>>> main
 
   // Lade Sessions von API im Hintergrund und aktualisiere Chart-Daten
-  useEffect(() => {
-    loadSessionsAsync().then(loadedSessions => {
-      setSessions(loadedSessions);
-      setChartData(generateChartData(events, loadedSessions));
-    });
-  }, []);
+  // useEffect(() => {
+  //   loadSessionsAsync().then(loadedSessions => {
+  //     setSessions(loadedSessions);
+  //     setChartData(generateChartData(events, loadedSessions));
+  //   });
+  // }, []);
 
-  // Aktualisiere Chart-Daten wenn Events sich ändern
-  useEffect(() => {
-    setChartData(generateChartData(events, sessions));
-  }, [events, sessions]);
+  // // Aktualisiere Chart-Daten wenn Events sich ändern
+  // useEffect(() => {
+  //   setChartData(generateChartData(events, sessions));
+  // }, [events, sessions]);
 
   return (
     <div>
@@ -694,28 +622,17 @@ function DashboardView({ userId, events, eventsLoading, eventsError }) {
               €{balance.toFixed(2)}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "10px" }}>
-<<<<<<< HEAD
-              <span style={css.tag(profitPositive ? "green" : "red")}>{profitPositive ? "↑" : "↓"} Bankroll</span>
-              <span style={{ fontSize: "12px", color: COLORS.textMuted }}>{events.length} Transaktionen + {sessions.length} Sessions</span>
-=======
               <span style={css.tag(balance >= 0 ? "green" : "red")}>{balance >= 0 ? "↑" : "↓"} Bankroll</span>
               <span style={{ fontSize: "12px", color: COLORS.textMuted }}>{events.length} Events gesamt</span>
->>>>>>> main
             </div>
           </div>
           <div style={{ width: "200px" }}><SparkChart data={chartData} /></div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0", marginTop: "20px", borderTop: `1px solid ${COLORS.green}20`, paddingTop: "16px" }}>
           {[
-<<<<<<< HEAD
-            { label: "Eingezahlt", value: `€${events.filter(e=>e.type==="deposit").reduce((s,e)=>s+e.amount,0).toFixed(0)}` },
-            { label: "Sessions Profit", value: `${sessionProfit >= 0 ? "+" : ""}€${sessionProfit.toFixed(0)}` },
-            { label: "Sessions",   value: sessions.length },
-=======
             { label: "Eingezahlt", value: `€${totalDeposits.toFixed(0)}`    },
             { label: "Ausgezahlt", value: `€${totalWithdrawals.toFixed(0)}` },
             { label: "Sessions",   value: sessions.length                   },
->>>>>>> main
           ].map((item, i) => (
             <div key={i} style={{ textAlign: i === 1 ? "center" : i === 2 ? "right" : "left" }}>
               <div style={{ fontSize: "11px", color: COLORS.textDim, letterSpacing: "0.06em", textTransform: "uppercase" }}>{item.label}</div>
@@ -768,22 +685,6 @@ function DashboardView({ userId, events, eventsLoading, eventsError }) {
 
       <div style={css.card}>
         <div style={css.sectionTitle}><span>Letzte Sessions</span></div>
-<<<<<<< HEAD
-        <div style={{ ...css.tableRow, borderBottom: `1px solid ${COLORS.borderLight}`, paddingBottom: "6px" }}>
-          {["Datum","Modus","Plattform","Notiz","Profit"].map((h, i) => (
-            <div key={i} style={{ fontSize: "10px", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, fontWeight: "600" }}>{h}</div>
-          ))}
-        </div>
-         {MOCK_BANKROLL_EVENTS.slice(0, 5).map((s) => (
-          <div key={s.id} style={css.tableRow}>
-            <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{s.date.slice(5)}</div>
-            <div><span style={css.tag(s.game_mode === "cashgame" ? "green" : "gold")}>{s.game_mode === "cashgame" ? "Cash" : "Turnier"}</span></div>
-            <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{s.platform}</div>
-            <div style={{ fontSize: "12px", color: COLORS.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.notes || "—"}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: "4px", ...css.profit(s.profit) }}>
-              {s.profit >= 0 ? <Icon.TrendUp /> : <Icon.TrendDown />}
-              {s.profit >= 0 ? "+" : ""}€{s.profit}
-=======
         {sessLoading ? (
           <div style={css.loadingText}>Lade Sessions…</div>
         ) : (
@@ -792,7 +693,6 @@ function DashboardView({ userId, events, eventsLoading, eventsError }) {
               {["Datum","Modus","Plattform","Notiz","Profit"].map((h, i) => (
                 <div key={i} style={{ fontSize: "10px", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, fontWeight: "600" }}>{h}</div>
               ))}
->>>>>>> main
             </div>
             {sessions.slice(0, 5).map((s) => (
               <div key={s.id} style={css.tableRow}>
@@ -848,10 +748,6 @@ function TransaktionenView({ userId, events, reloadEvents, onNavigate }) {
     }
   }
 
-<<<<<<< HEAD
-  const events = loadEvents();
-  const current_bankroll = getCurrentBankroll();
-=======
   async function handle_withdrawal_success(formData) {
     try {
       await api.createWithdrawal(userId, formData.amount, formData.notes ?? "");
@@ -863,7 +759,6 @@ function TransaktionenView({ userId, events, reloadEvents, onNavigate }) {
       await reloadEvents();
     }
   }
->>>>>>> main
 
   return (
     <div>
@@ -894,42 +789,10 @@ function TransaktionenView({ userId, events, reloadEvents, onNavigate }) {
 // HISTORY VIEW
 // ─────────────────────────────────────────────────────────────────────────────
 
-<<<<<<< HEAD
-function HistoryView() {
-  const [events, setEvents] = useState(() => loadBankrollEventsSync());
-  const [sessions, setSessions] = useState(() => loadSessionsSync());
-  const [loading, setLoading] = useState(true);
-
-  // Beim Mounten lade Events und Sessions von API
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [eventsData, sessionsData] = await Promise.all([
-          loadBankrollEventsAsync(),
-          loadSessionsAsync()
-        ]);
-        setEvents(eventsData || []);
-        setSessions(sessionsData || []);
-      } catch (error) {
-        console.error("Error loading history data:", error);
-      }
-      setLoading(false);
-    };
-    fetchData();
-  }, []);
-
-  const totalDeposits    = events.filter(e => e.type === "deposit").reduce((s, e) => s + e.amount, 0);
-  const totalWithdrawals = events.filter(e => e.type === "withdrawal").reduce((s, e) => s + e.amount, 0);
-  const transactionBalance = totalDeposits - totalWithdrawals;
-  const sessionProfit = sessions.reduce((s, session) => s + (session.profit || 0), 0);
-  const balance = transactionBalance + sessionProfit;
-=======
 function HistoryView({ events, eventsLoading, eventsError }) {
   const totalDeposits    = events.filter(e => e.event_type?.toUpperCase() === "DEPOSIT"   ).reduce((s, e) => s + Math.abs(e.amount), 0);
   const totalWithdrawals = events.filter(e => e.event_type?.toUpperCase() === "WITHDRAWAL").reduce((s, e) => s + Math.abs(e.amount), 0);
   const balance          = totalDeposits - totalWithdrawals;
->>>>>>> main
 
   if (eventsLoading) return <div style={css.loadingText}>Lade Transaktionshistorie…</div>;
 
@@ -997,27 +860,9 @@ function HistoryView({ events, eventsLoading, eventsError }) {
   );
 }
 
-<<<<<<< HEAD
-function SessionsView() {
-  const [sessions, setSessions] = useState(() => loadSessionsSync());
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  // Lade Sessions beim Mount
-  useEffect(() => {
-    const fetchSessions = async () => {
-      setLoading(true);
-      const data = await loadSessionsAsync();
-      setSessions(data || []);
-      setLoading(false);
-    };
-    fetchSessions();
-  }, []);
-=======
 // ─────────────────────────────────────────────────────────────────────────────
 // DELETE CONFIRM MODAL
 // ─────────────────────────────────────────────────────────────────────────────
->>>>>>> main
 
 function DeleteConfirmModal({ session, onConfirm, onCancel }) {
   if (!session) return null;
@@ -1122,32 +967,6 @@ function SessionsView({ userId }) {
 
       <div style={css.card}>
         <div style={css.sectionTitle}><span>Alle Sessions</span></div>
-<<<<<<< HEAD
-        <div style={{ ...css.tableRow, borderBottom: `1px solid ${COLORS.borderLight}`, paddingBottom: "6px" }}>
-          {["Datum","Modus","Plattform","Notiz","Profit"].map((h, i) => (
-            <div key={i} style={{ fontSize: "10px", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, fontWeight: "600" }}>{h}</div>
-          ))}
-        </div>
-        {loading && (
-          <div style={{ textAlign: "center", padding: "20px", color: COLORS.textDim }}>
-            Lade Sessions...
-          </div>
-        )}
-        {!loading && sessions.length === 0 && (
-          <div style={{ textAlign: "center", padding: "20px", color: COLORS.textDim }}>
-            Keine Sessions erfasst.
-          </div>
-        )}
-        {sessions.map((s) => (
-          <div key={s.id} style={css.tableRow}>
-            <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{s.started_at ? s.started_at.split("T")[0] : s.date}</div>
-            <div><span style={css.tag(s.type === "cashgame" ? "green" : "gold")}>{s.type === "cashgame" ? "Cash" : "Turnier"}</span></div>
-            <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{s.platform}</div>
-            <div style={{ fontSize: "12px", color: COLORS.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.notes || "—"}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: "4px", ...css.profit(s.profit) }}>
-              {s.profit >= 0 ? <Icon.TrendUp /> : <Icon.TrendDown />}
-              {s.profit >= 0 ? "+" : ""}€{s.profit}
-=======
         {loading && <div style={css.loadingText}>Lade Sessions…</div>}
         {error   && <div style={css.errorText}>Fehler: {error}</div>}
 
@@ -1157,7 +976,6 @@ function SessionsView({ userId }) {
               {["Datum","Modus","Plattform","Notiz","Profit",""].map((h, i) => (
                 <div key={i} style={{ fontSize: "10px", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, fontWeight: "600" }}>{h}</div>
               ))}
->>>>>>> main
             </div>
             {sessions.length === 0 && (
               <div style={{ textAlign: "center", padding: "30px", color: COLORS.textDim, fontSize: "14px" }}>
@@ -1193,29 +1011,6 @@ function SessionsView({ userId }) {
   );
 }
 
-<<<<<<< HEAD
-function StatsView() {
-  const events = loadEvents();
-  const [sessions, setSessions] = useState(() => loadSessionsSync());
-  const [chartData, setChartData] = useState(() => generateChartData(events, loadSessionsSync()));
-  const totalDeposits = events.filter(e => e.type === "deposit").reduce((s, e) => s + e.amount, 0);
-  const totalWithdrawals = events.filter(e => e.type === "withdrawal").reduce((s, e) => s + e.amount, 0);
-  const transactionBalance = totalDeposits - totalWithdrawals;
-  const balance = getCurrentBankroll();
-
-  // Lade Sessions von API im Hintergrund
-  useEffect(() => {
-    loadSessionsAsync().then(loadedSessions => {
-      setSessions(loadedSessions);
-      setChartData(generateChartData(events, loadedSessions));
-    });
-  }, []);
-
-  // Aktualisiere Chart-Daten wenn Events sich ändern
-  useEffect(() => {
-    setChartData(generateChartData(events, sessions));
-  }, [events, sessions]);
-=======
 // ─────────────────────────────────────────────────────────────────────────────
 // STATS VIEW
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1248,23 +1043,15 @@ function StatsView({ userId, events }) {
   });
   const monthEntries = Object.entries(monthCounts).slice(-4);
   const maxMonth     = Math.max(...monthEntries.map(([, v]) => v), 1);
->>>>>>> main
 
   return (
     <div>
       <div style={css.grid4}>
         {[
-<<<<<<< HEAD
-          { label: "Gesamt Bankroll",  value: `€${balance.toFixed(2)}`,               color: "green" },
-          { label: "Sessions gesamt",  value: sessions.length,                         color: "text"  },
-          { label: "Stunden gespielt", value: MOCK_STATS.totalHours,                   color: "text"  },
-          { label: "Gewinnrate",       value: `${MOCK_STATS.winRate}%`,                color: "gold"  },
-=======
           { label: "Gesamt Bankroll",  value: `€${balance.toFixed(2)}`, color: "green" },
           { label: "Sessions gesamt",  value: sessions.length,           color: "text"  },
           { label: "Deposits",         value: events.filter(e => e.event_type?.toUpperCase() === "DEPOSIT").length, color: "text" },
           { label: "Gewinnrate",       value: `${winRate}%`,             color: "gold"  },
->>>>>>> main
         ].map((item, i) => (
           <div key={i} style={css.statCard}>
             <div style={{ fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.textDim, marginBottom: "6px" }}>{item.label}</div>

@@ -1,5 +1,5 @@
+#import model  # Import all models so metadata knows about them
 from model.base import Base, engine
-import model  # Import all models so metadata knows about them
 
 def init_db():
     """Initialize database by creating all tables"""
