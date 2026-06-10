@@ -1,21 +1,22 @@
-from fastapi import FastAPI
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from model.base import get_db
 from crud.cashSessionCrud import CashSessionCrud
 
-app = FastAPI()
+router = APIRouter()
 
-@app.post("/cash-session/{db_session}/{session_id}/{buy_in}")
+@router.post("/cash-session/{session_id}/{buy_in}")
 # This endpoint creates a new cash session in the database.
-async def create_cash_session(db_session: Session, session_id: int, buy_in: float, cash_out: float = None):
+async def create_cash_session(session_id: int, buy_in: float, cash_out: float = None, db_session: Session = Depends(get_db)):
     try:
         CashSessionCrud.create_cash_session(db_session, session_id, buy_in, cash_out)
         return {"message": "Cash session created successfully"}
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/cash-session/{db_session}/{cash_session_id}")
+@router.get("/cash-session/{cash_session_id}")
 # This endpoint returns a cash session based on its id.
-async def get_cash_session_by_id(db_session: Session, cash_session_id: int):
+async def get_cash_session_by_id(cash_session_id: int, db_session: Session = Depends(get_db)):
     try:
         cash_session = CashSessionCrud.get_cash_session_by_id(db_session, cash_session_id)
         return {
@@ -28,9 +29,9 @@ async def get_cash_session_by_id(db_session: Session, cash_session_id: int):
     except Exception as e:
         return {"error": str(e)}
 
-@app.get("/cash-session/session/{db_session}/{session_id}")
+@router.get("/cash-session/session/{session_id}")
 # This endpoint returns a cash session based on its session id.
-async def get_cash_session_by_session_id(db_session: Session, session_id: int):
+async def get_cash_session_by_session_id(session_id: int, db_session: Session = Depends(get_db)):
     try:
         cash_session = CashSessionCrud.get_cash_session_by_session_id(db_session, session_id)
         return {
@@ -43,18 +44,18 @@ async def get_cash_session_by_session_id(db_session: Session, session_id: int):
     except Exception as e:
         return {"error": str(e)}
 
-@app.put("/cash-session/{db_session}/{cash_session_id}")
+@router.put("/cash-session/{cash_session_id}")
 # This endpoint updates a cash session based on its id.
-async def update_cash_session(db_session: Session, cash_session_id: int, buy_in: float = None, cash_out: float = None):
+async def update_cash_session(cash_session_id: int, buy_in: float = None, cash_out: float = None, db_session: Session = Depends(get_db)):
     try:
         CashSessionCrud.update_cash_session(db_session, cash_session_id, buy_in, cash_out)
         return {"message": "successfully updated cash session"}
     except Exception as e:
         return {"error": str(e)}
 
-@app.delete("/cash-session/delete/{db_session}/{cash_session_id}")
+@router.delete("/cash-session/delete/{cash_session_id}")
 # This endpoint deletes a cash session based on its id.
-async def delete_cash_session(db_session: Session, cash_session_id: int):
+async def delete_cash_session(cash_session_id: int, db_session: Session = Depends(get_db)):
     try:
         CashSessionCrud.delete_cash_session(db_session, cash_session_id)
         return {"message": "successfully deleted cash session"}

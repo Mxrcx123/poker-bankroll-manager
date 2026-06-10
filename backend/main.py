@@ -1,45 +1,58 @@
+#Überarbeitet von Andreas Haas
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from db.init_db import init_db
+import model  # Sicherstellen, dass alle Models geladen sind, bevor init_db() aufgerufen wird
 
-# Initialize database
+# Importiere alle Router – Pfad anpassen je nach Ordnerstruktur!
+from api.check_api_connection import router as check_router
+from api.userCrud_api import router as user_router
+from api.sessionCrud_api import router as session_router
+from api.cashSessionCrud_api import router as cash_session_router
+from api.tournamentCrud_api import router as tournament_router
+from api.gameModeCrud_api import router as game_mode_router
+from api.platformCrud_api import router as platform_router
+from api.bankrollEventCrud_api import router as bankroll_event_router
+from api.bankrollSnapshotCrud_api import router as bankroll_snapshot_router
+from api.deposit_api import router as deposit_router
+from api.withdrawal_api import router as withdrawal_router
+
 try:
     init_db()
 except Exception as e:
     print(f"Warning: Could not initialize database: {e}")
 
-# Create FastAPI app
 app = FastAPI(
     title="Poker Bankroll Manager API",
     description="API for managing poker bankroll, sessions, and statistics",
     version="1.0.0"
 )
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict this to specific domains
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-@app.get("/")
-def read_root():
-    """Root endpoint"""
-    return {"message": "Poker Bankroll Manager API", "version": "1.0.0"}
-
+# Router einbinden
+app.include_router(check_router)
+app.include_router(user_router)
+app.include_router(session_router)
+app.include_router(cash_session_router)
+app.include_router(tournament_router)
+app.include_router(game_mode_router)
+app.include_router(platform_router)
+app.include_router(bankroll_event_router)
+app.include_router(bankroll_snapshot_router)
+app.include_router(deposit_router)
+app.include_router(withdrawal_router)
 
 @app.get("/health")
 def health_check():
-    """Health check endpoint"""
     return {"status": "healthy"}
-
-
-# Routes will be imported here
-# from app.routes import users, sessions, cash_sessions, tournaments, game_modes, platforms, bankroll_events, bankroll_snapshots
-
 
 if __name__ == "__main__":
     import uvicorn
