@@ -41,7 +41,7 @@ const api = {
   createWithdrawal: (userId, amount, notes = "") =>
     apiFetch(`/withdrawals/`, {
       method: "POST",
-      body: JSON.stringify({ user_id: userId, amount: Number(amount), note: notes || null, currency: "EUR" }),
+      body: JSON.stringify({ user_id: userId, amount: Number(amount), note: notes || null, currency: "EUR", date: new Date().toISOString() }),
     }),
 
   // ── Sessions ───────────────────────────────────────────────────────────────
