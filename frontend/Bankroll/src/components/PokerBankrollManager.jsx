@@ -2,13 +2,13 @@ import { useState, useEffect, useCallback } from "react";
 import AddDeposit from "./AddDeposit.jsx";
 import RecordWithdrawal from "./RecordWithdrawl.jsx";
 import CreateSession from "./CreateSession.jsx";
+import AuthScreen from "./AuthScreen.jsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// API CONFIG — Basis-URL hier anpassen
+// API CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
 
-const BASE_URL = "http://localhost:8000"; // <-- hier deine Backend-URL eintragen
-const USER_ID = 1; // <-- aktuell eingeloggter User
+const BASE_URL = "http://localhost:8000";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // API HELPERS
@@ -23,98 +23,149 @@ async function apiFetch(path, options = {}) {
   return res.json();
 }
 
-// Bankroll Events (Deposits & Withdrawals)
 const api = {
-  // Bankroll Events
-  getBankrollEvents: () => apiFetch(`/bankroll-event/user/db/${USER_ID}`),
-  createDeposit: (amount, notes = "") =>
+  // ── Bankroll Events ────────────────────────────────────────────────────────
+  getBankrollEvents: (userId) =>
+    apiFetch(`/bankroll-event/user/${userId}`),
+
+  // Deposit via deposit_api.py → POST /deposits/ mit JSON-Body
+  // Erstellt Deposit-Eintrag + BankrollEvent + aktualisiert user.balance
+  createDeposit: (userId, amount, notes = "") =>
     apiFetch(`/deposits/`, {
       method: "POST",
-      body: JSON.stringify({ amount, notes }),
+      body: JSON.stringify({ user_id: userId, amount: Number(amount), notes: notes || null }),
     }),
-  createWithdrawal: (amount, notes = "") =>
+
+  // Withdrawal via withdrawal_api.py → POST /withdrawals/ mit JSON-Body
+  // Erstellt Withdrawal-Eintrag + BankrollEvent (negativer Betrag) + aktualisiert user.balance
+  createWithdrawal: (userId, amount, notes = "") =>
     apiFetch(`/withdrawals/`, {
       method: "POST",
-      body: JSON.stringify({ amount, notes }),
+      body: JSON.stringify({ user_id: userId, amount: Number(amount), note: notes || null, currency: "EUR", date: new Date().toISOString() }),
     }),
 
-  // Sessions
-  getSessions: () => apiFetch(`/session/user/db/${USER_ID}`),
-  createSession: (game_mode_id, platform_id, notes) =>
-    apiFetch(`/session/db/${USER_ID}/${game_mode_id}`, {
+  // ── Sessions ───────────────────────────────────────────────────────────────
+  getSessions: (userId) =>
+    apiFetch(`/session/user/${userId}`),
+
+  createSession: (userId, game_mode_id, platform_id, notes) => {
+    const params = new URLSearchParams();
+    if (platform_id != null) params.append("platform_id", platform_id);
+    if (notes)               params.append("notes",       notes);
+    const qs = params.toString();
+    return apiFetch(`/session/${userId}/${game_mode_id}${qs ? `?${qs}` : ""}`, {
       method: "POST",
-      body: JSON.stringify({ platform_id, notes }),
-    }),
+    });
+  },
 
-  // Cash sessions
+  deleteSession: (session_id) =>
+    apiFetch(`/session/delete/${session_id}`, { method: "DELETE" }),
+
+  // ── Cash Sessions ──────────────────────────────────────────────────────────
   getCashSession: (session_id) =>
-    apiFetch(`/cash-session/session/db/${session_id}`),
+    apiFetch(`/cash-session/session/${session_id}`),
 
-  // Tournaments
+  createCashSession: (session_id, buy_in, cash_out) => {
+    const qs = cash_out != null ? `?cash_out=${cash_out}` : "";
+    return apiFetch(`/cash-session/${session_id}/${buy_in}${qs}`, {
+      method: "POST",
+    });
+  },
+
+  // ── Tournaments ────────────────────────────────────────────────────────────
   getTournament: (session_id) =>
-    apiFetch(`/tournament/session/db/${session_id}`),
+    apiFetch(`/tournament/session/${session_id}`),
 
-  // Platforms
-  getPlatforms: () => apiFetch(`/platform/all/db`),
+  createTournament: (session_id, buy_in, opts = {}) => {
+    const params = new URLSearchParams();
+    if (opts.fee             != null) params.append("fee",             opts.fee);
+    if (opts.rebuys          != null) params.append("rebuys",          opts.rebuys);
+    if (opts.rebuy_cost      != null) params.append("rebuy_cost",      opts.rebuy_cost);
+    if (opts.add_ons         != null) params.append("add_ons",         opts.add_ons);
+    if (opts.add_on_cost     != null) params.append("add_on_cost",     opts.add_on_cost);
+    if (opts.winnings        != null) params.append("winnings",        opts.winnings);
+    if (opts.finish_position != null) params.append("finish_position", opts.finish_position);
+    const qs = params.toString();
+    return apiFetch(`/tournament/${session_id}/${buy_in}${qs ? `?${qs}` : ""}`, {
+      method: "POST",
+    });
+  },
 
-  // Game Modes
-  getGameModes: () => apiFetch(`/game-mode/all/db`),
-
-  // Bankroll Snapshots
-  getSnapshots: () => apiFetch(`/bankroll-snapshot/user/db/${USER_ID}`),
+  // ── Lookup-Daten ───────────────────────────────────────────────────────────
+  getPlatforms:  ()       => apiFetch(`/platform/all`),
+  getGameModes:  ()       => apiFetch(`/game-mode/all`),
+  getSnapshots:  (userId) => apiFetch(`/bankroll-snapshot/user/${userId}`),
 };
+
+const GAME_MODE_ID = { cashgame: 1, tournament: 2 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HOOKS
 // ─────────────────────────────────────────────────────────────────────────────
 
-function useBankrollEvents() {
-  const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+// FIX 1: Guard gegen undefined/null userId — verhindert /bankroll-event/user/undefined
+// FIX 3: Setzt Events auf [] zurück wenn userId wegfällt (Logout)
+function useBankrollEvents(userId) {
+  const [events,  setEvents]  = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState(null);
 
   const load = useCallback(async () => {
+    // FIX 1: Blockiert Fetch solange kein gültiger User — kein Request an /user/undefined
+    if (!userId) {
+      setEvents([]);   // FIX 3: State bei Logout/kein User sofort leeren
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      const data = await api.getBankrollEvents();
-      // API liefert { events: [...] }
-      setEvents(data.events ?? []);
+      setError(null);
+      const data = await api.getBankrollEvents(userId);
+      // FIX 1: API gibt "bankroll_events" zurück, nicht "events"
+      setEvents(data.bankroll_events ?? data.events ?? []);
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => { load(); }, [load]);
   return { events, loading, error, reload: load };
 }
 
-function useSessions() {
+function useSessions(userId) {
   const [sessions, setSessions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState(null);
 
   const load = useCallback(async () => {
+    // FIX 1: Guard gegen undefined userId
+    if (!userId) {
+      setSessions([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      const data = await api.getSessions();
-      // API liefert { sessions: [...] }
-      const raw = data.sessions ?? [];
+      setError(null);
+      const data = await api.getSessions(userId);
+      const raw  = data.sessions ?? [];
 
-      // Profit berechnen: für jede Session Cash-Session oder Tournament laden
       const enriched = await Promise.all(
         raw.map(async (s) => {
           try {
-            if (s.game_mode_id === 1) {
-              // Cashgame (game_mode_id 1 = cashgame — ggf. anpassen)
-              const cs = await api.getCashSession(s.id);
+            if (s.game_mode_id === GAME_MODE_ID.cashgame) {
+              const cs     = await api.getCashSession(s.id);
               const profit = (cs.cash_out ?? cs.buy_in) - cs.buy_in;
               return { ...s, game_mode: "cashgame", buy_in: cs.buy_in, cash_out: cs.cash_out, profit };
             } else {
-              // Tournament
-              const t = await api.getTournament(s.id);
-              const totalCost = (t.buy_in ?? 0) + (t.fee ?? 0) + (t.rebuys ?? 0) * (t.rebuy_cost ?? 0) + (t.add_ons ?? 0) * (t.add_on_cost ?? 0);
+              const t         = await api.getTournament(s.id);
+              const totalCost =
+                (t.buy_in  ?? 0) +
+                (t.fee     ?? 0) +
+                (t.rebuys  ?? 0) * (t.rebuy_cost  ?? 0) +
+                (t.add_ons ?? 0) * (t.add_on_cost ?? 0);
               const profit = (t.winnings ?? 0) - totalCost;
               return { ...s, game_mode: "tournament", buy_in: t.buy_in, fee: t.fee, winnings: t.winnings, profit };
             }
@@ -130,22 +181,32 @@ function useSessions() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => { load(); }, [load]);
   return { sessions, loading, error, reload: load };
 }
 
-function useSnapshots() {
+function useSnapshots(userId) {
   const [snapshots, setSnapshots] = useState([]);
-
   useEffect(() => {
-    api.getSnapshots()
+    // FIX 1: Guard gegen undefined userId
+    if (!userId) { setSnapshots([]); return; }
+    api.getSnapshots(userId)
       .then(data => setSnapshots(data.snapshots ?? []))
       .catch(() => setSnapshots([]));
-  }, []);
-
+  }, [userId]);
   return snapshots;
+}
+
+function usePlatforms() {
+  const [platforms, setPlatforms] = useState([]);
+  useEffect(() => {
+    api.getPlatforms()
+      .then(data => setPlatforms(data.platforms ?? []))
+      .catch(() => setPlatforms([]));
+  }, []);
+  return platforms;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -211,6 +272,11 @@ const Icon = {
       <path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
     </svg>
   ),
+  Logout: () => (
+    <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
+    </svg>
+  ),
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -218,27 +284,27 @@ const Icon = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const COLORS = {
-  bg: "#0d1520",
-  surface: "#111c2d",
-  card: "#162035",
-  cardHover: "#1a2740",
-  border: "#1e3050",
+  bg:          "#0d1520",
+  surface:     "#111c2d",
+  card:        "#162035",
+  cardHover:   "#1a2740",
+  border:      "#1e3050",
   borderLight: "#243860",
-  green: "#22c55e",
-  greenDim: "#16a34a",
-  greenMuted: "#14532d",
-  greenText: "#4ade80",
-  gold: "#f59e0b",
-  goldDim: "#d97706",
-  goldMuted: "#451a03",
-  goldText: "#fbbf24",
-  red: "#ef4444",
-  redMuted: "#450a0a",
-  redText: "#f87171",
-  text: "#f0f6ff",
-  textMuted: "#7a9cc4",
-  textDim: "#3d5a8a",
-  white: "#ffffff",
+  green:       "#22c55e",
+  greenDim:    "#16a34a",
+  greenMuted:  "#14532d",
+  greenText:   "#4ade80",
+  gold:        "#f59e0b",
+  goldDim:     "#d97706",
+  goldMuted:   "#451a03",
+  goldText:    "#fbbf24",
+  red:         "#ef4444",
+  redMuted:    "#450a0a",
+  redText:     "#f87171",
+  text:        "#f0f6ff",
+  textMuted:   "#7a9cc4",
+  textDim:     "#3d5a8a",
+  white:       "#ffffff",
 };
 
 const css = {
@@ -273,9 +339,9 @@ const css = {
     display: "flex", alignItems: "center", gap: "10px",
     padding: "9px 12px", borderRadius: "8px", cursor: "pointer",
     fontSize: "14px", fontWeight: active ? "600" : "400",
-    color: active ? COLORS.greenText : COLORS.textMuted,
+    color:      active ? COLORS.greenText : COLORS.textMuted,
     background: active ? `${COLORS.green}18` : "transparent",
-    border: active ? `1px solid ${COLORS.green}30` : "1px solid transparent",
+    border:     active ? `1px solid ${COLORS.green}30` : "1px solid transparent",
     outline: "none", transition: "all 0.15s",
   }),
   main: { flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" },
@@ -300,9 +366,9 @@ const css = {
     fontSize: "13px", fontWeight: "500",
     border: `1px solid ${COLORS.border}`, cursor: "pointer",
   },
-  content: { flex: 1, padding: "24px 28px", overflowY: "auto" },
-  grid4: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px", marginBottom: "20px" },
-  grid3: { display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: "16px", marginBottom: "20px" },
+  content:  { flex: 1, padding: "24px 28px", overflowY: "auto" },
+  grid4:    { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px", marginBottom: "20px" },
+  grid3:    { display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: "16px", marginBottom: "20px" },
   card: {
     background: COLORS.card, border: `1px solid ${COLORS.border}`,
     borderRadius: "12px", padding: "20px",
@@ -360,8 +426,8 @@ function SparkChart({ data }) {
     <svg width="100%" height={h + 10} viewBox={`0 0 ${w} ${h + 10}`} preserveAspectRatio="none">
       <defs>
         <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={COLORS.green} stopOpacity="0.25" />
-          <stop offset="100%" stopColor={COLORS.green} stopOpacity="0" />
+          <stop offset="0%"   stopColor={COLORS.green} stopOpacity="0.25" />
+          <stop offset="100%" stopColor={COLORS.green} stopOpacity="0"    />
         </linearGradient>
       </defs>
       <polygon points={`0,${h} ${pts.join(" ")} ${w},${h}`} fill="url(#sg)" />
@@ -388,52 +454,51 @@ function BankrollChart({ data }) {
     <svg width="100%" height={h + 24} viewBox={`0 0 ${w} ${h + 24}`}>
       <defs>
         <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={COLORS.green} stopOpacity="0.3" />
-          <stop offset="100%" stopColor={COLORS.green} stopOpacity="0" />
+          <stop offset="0%"   stopColor={COLORS.green} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={COLORS.green} stopOpacity="0"   />
         </linearGradient>
       </defs>
       <polygon points={`30,${h} ${line} ${pts[pts.length-1].x},${h}`} fill="url(#ag)" />
       <polyline points={line} fill="none" stroke={COLORS.green} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
       {pts.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="4" fill={COLORS.green} stroke={COLORS.card} strokeWidth="2" />)}
-      {pts.map((p, i) => <text key={i} x={p.x} y={h+18} textAnchor="middle" fontSize="11" fill={COLORS.textMuted} fontFamily="DM Sans,sans-serif">{p.label}</text>)}
-      {pts.map((p, i) => <text key={i} x={p.x} y={p.y-8} textAnchor="middle" fontSize="10" fill={COLORS.greenText} fontFamily="DM Sans,sans-serif" fontWeight="600">€{p.value}</text>)}
+      {pts.map((p, i) => <text key={i} x={p.x} y={h + 18} textAnchor="middle" fontSize="11" fill={COLORS.textMuted} fontFamily="DM Sans,sans-serif">{p.label}</text>)}
+      {pts.map((p, i) => <text key={i} x={p.x} y={p.y - 8} textAnchor="middle" fontSize="10" fill={COLORS.greenText} fontFamily="DM Sans,sans-serif" fontWeight="600">€{p.value}</text>)}
     </svg>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // VIEWS
+// FIX 2: Alle Views erhalten events + reloadEvents als Props von der Hauptkomponente.
+//         Dadurch wird nach jeder Transaktion die Liste appweit aktualisiert,
+//         egal in welcher View man sich gerade befindet.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DashboardView() {
-  const { events, loading, error } = useBankrollEvents();
-  const { sessions, loading: sessLoading } = useSessions();
-  const snapshots = useSnapshots();
+function DashboardView({ userId, events, eventsLoading, eventsError }) {
+  const { sessions, loading: sessLoading } = useSessions(userId);
+  const snapshots = useSnapshots(userId);
 
-  const totalDeposits    = events.filter(e => e.event_type === "deposit").reduce((s, e) => s + e.amount, 0);
-  const totalWithdrawals = events.filter(e => e.event_type === "withdrawal").reduce((s, e) => s + e.amount, 0);
-  const balance = totalDeposits - totalWithdrawals;
-  const profitPositive = balance >= 0;
+  // Math.abs(): withdrawal_crud speichert negative Betraege → abs() macht die Berechnung robust
+  const totalDeposits    = events.filter(e => e.event_type?.toUpperCase() === "DEPOSIT"   ).reduce((s, e) => s + Math.abs(e.amount), 0);
+  const totalWithdrawals = events.filter(e => e.event_type?.toUpperCase() === "WITHDRAWAL").reduce((s, e) => s + Math.abs(e.amount), 0);
+  const balance          = totalDeposits - totalWithdrawals;
 
-  // Chart-Daten aus Snapshots aufbauen
   const chartData = snapshots.map(s => ({
     label: new Date(s.recorded_at).toLocaleDateString("de-AT", { month: "short" }),
     value: s.amount,
   }));
 
-  // Session-Stats berechnen
-  const profits = sessions.map(s => s.profit).filter(p => p !== undefined);
-  const winRate = profits.length > 0 ? ((profits.filter(p => p > 0).length / profits.length) * 100).toFixed(1) : "—";
-  const avgProfit = profits.length > 0 ? (profits.reduce((a, b) => a + b, 0) / profits.length).toFixed(2) : 0;
-  const bestSession = profits.length > 0 ? Math.max(...profits) : 0;
+  const profits      = sessions.map(s => s.profit).filter(p => p !== undefined);
+  const winRate      = profits.length > 0 ? ((profits.filter(p => p > 0).length / profits.length) * 100).toFixed(1) : "—";
+  const avgProfit    = profits.length > 0 ? (profits.reduce((a, b) => a + b, 0) / profits.length).toFixed(2) : 0;
+  const bestSession  = profits.length > 0 ? Math.max(...profits) : 0;
   const worstSession = profits.length > 0 ? Math.min(...profits) : 0;
 
-  if (loading) return <div style={css.loadingText}>Lade Bankroll-Daten…</div>;
-  if (error) return <div style={css.errorText}>Fehler: {error}</div>;
+  if (eventsLoading) return <div style={css.loadingText}>Lade Bankroll-Daten…</div>;
+  if (eventsError)   return <div style={css.errorText}>Fehler: {eventsError}</div>;
 
   return (
     <div>
-      {/* Bankroll Hero */}
       <div style={{ ...css.card, marginBottom: "20px", background: "linear-gradient(135deg, #162035 0%, #0f2318 100%)", border: `1px solid ${COLORS.green}30`, position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", right: "-20px", top: "-20px", width: "200px", height: "200px", borderRadius: "50%", background: `${COLORS.green}08`, pointerEvents: "none" }} />
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -443,7 +508,7 @@ function DashboardView() {
               €{balance.toFixed(2)}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "10px" }}>
-              <span style={css.tag(profitPositive ? "green" : "red")}>{profitPositive ? "↑" : "↓"} Bankroll</span>
+              <span style={css.tag(balance >= 0 ? "green" : "red")}>{balance >= 0 ? "↑" : "↓"} Bankroll</span>
               <span style={{ fontSize: "12px", color: COLORS.textMuted }}>{events.length} Events gesamt</span>
             </div>
           </div>
@@ -451,9 +516,9 @@ function DashboardView() {
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0", marginTop: "20px", borderTop: `1px solid ${COLORS.green}20`, paddingTop: "16px" }}>
           {[
-            { label: "Eingezahlt", value: `€${totalDeposits.toFixed(0)}` },
+            { label: "Eingezahlt", value: `€${totalDeposits.toFixed(0)}`    },
             { label: "Ausgezahlt", value: `€${totalWithdrawals.toFixed(0)}` },
-            { label: "Sessions",   value: sessions.length },
+            { label: "Sessions",   value: sessions.length                   },
           ].map((item, i) => (
             <div key={i} style={{ textAlign: i === 1 ? "center" : i === 2 ? "right" : "left" }}>
               <div style={{ fontSize: "11px", color: COLORS.textDim, letterSpacing: "0.06em", textTransform: "uppercase" }}>{item.label}</div>
@@ -463,13 +528,12 @@ function DashboardView() {
         </div>
       </div>
 
-      {/* Stat Cards */}
       <div style={css.grid4}>
         {[
-          { label: "Gewinnrate",       value: `${winRate}%`,                                       color: "green" },
-          { label: "Ø Profit/Session", value: `€${avgProfit}`,                                     color: Number(avgProfit) >= 0 ? "green" : "red" },
-          { label: "Beste Session",    value: bestSession > 0 ? `+€${bestSession}` : "—",          color: "gold" },
-          { label: "Schlechteste",     value: worstSession < 0 ? `€${worstSession}` : "—",         color: "red" },
+          { label: "Gewinnrate",       value: `${winRate}%`,                              color: "green" },
+          { label: "Ø Profit/Session", value: `€${avgProfit}`,                            color: Number(avgProfit) >= 0 ? "green" : "red" },
+          { label: "Beste Session",    value: bestSession > 0 ? `+€${bestSession}` : "—", color: "gold" },
+          { label: "Schlechteste",     value: worstSession < 0 ? `€${worstSession}` : "—", color: "red" },
         ].map((item, i) => (
           <div key={i} style={css.statCard}>
             <div style={{ fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.textDim, marginBottom: "6px" }}>{item.label}</div>
@@ -480,7 +544,6 @@ function DashboardView() {
         ))}
       </div>
 
-      {/* Chart + letzte Events */}
       <div style={css.grid3}>
         <div style={css.card}>
           <div style={css.sectionTitle}><span>Bankroll-Entwicklung</span><span style={{ fontSize: "11px", color: COLORS.textDim, fontWeight: "400", textTransform: "none", letterSpacing: 0 }}>2026</span></div>
@@ -491,13 +554,13 @@ function DashboardView() {
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             {events.slice(0, 4).map((ev) => (
               <div key={ev.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: COLORS.surface, borderRadius: "8px", border: `1px solid ${COLORS.border}` }}>
-                <span style={css.tag(ev.event_type === "deposit" ? "green" : "red")}>{ev.event_type === "deposit" ? "Einzahlung" : "Auszahlung"}</span>
+                <span style={css.tag(ev.event_type?.toUpperCase() === "DEPOSIT" ? "green" : "red")}>{ev.event_type?.toUpperCase() === "DEPOSIT" ? "Einzahlung" : "Auszahlung"}</span>
                 <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: "14px", fontWeight: "700", color: ev.event_type === "deposit" ? COLORS.greenText : COLORS.redText }}>
-                    {ev.event_type === "deposit" ? "+" : "-"}€{ev.amount.toFixed(2)}
+                  <div style={{ fontSize: "14px", fontWeight: "700", color: ev.event_type?.toUpperCase() === "DEPOSIT" ? COLORS.greenText : COLORS.redText }}>
+                    {ev.event_type?.toUpperCase() === "DEPOSIT" ? "+" : "-"}€{ev.amount.toFixed(2)}
                   </div>
                   <div style={{ fontSize: "11px", color: COLORS.textDim }}>
-                    {ev.created_at ? new Date(ev.created_at).toLocaleDateString("de-AT") : ""}
+                    {ev.occurred_at ? new Date(ev.occurred_at).toLocaleDateString("de-AT") : ""}
                   </div>
                 </div>
               </div>
@@ -506,7 +569,6 @@ function DashboardView() {
         </div>
       </div>
 
-      {/* Letzte Sessions */}
       <div style={css.card}>
         <div style={css.sectionTitle}><span>Letzte Sessions</span></div>
         {sessLoading ? (
@@ -540,66 +602,90 @@ function DashboardView() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TRANSAKTIONS VIEW — ruft AddDeposit und RecordWithdrawal auf
-// Nach Erfolg: Reload der Events via onNavigate
+// TRANSAKTIONEN VIEW
+// FIX 2: reloadEvents kommt von der Hauptkomponente — aktualisiert alle Views
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TransaktionenView({ onNavigate }) {
-  const { events, reload } = useBankrollEvents();
+function TransaktionenView({ userId, events, reloadEvents, onNavigate }) {
+  const [notification, setNotification] = useState(null); // { type: "success"|"error", msg: string }
 
-  const totalDeposits    = events.filter(e => e.event_type === "deposit").reduce((s, e) => s + e.amount, 0);
-  const totalWithdrawals = events.filter(e => e.event_type === "withdrawal").reduce((s, e) => s + e.amount, 0);
+  // Withdrawal-Betraege werden in withdrawal_crud mit negativem Vorzeichen gespeichert
+  // Math.abs() stellt sicher, dass die Berechnung korrekt ist egal ob + oder -
+  const totalDeposits    = events.filter(e => e.event_type?.toUpperCase() === "DEPOSIT"   ).reduce((s, e) => s + Math.abs(e.amount), 0);
+  const totalWithdrawals = events.filter(e => e.event_type?.toUpperCase() === "WITHDRAWAL").reduce((s, e) => s + Math.abs(e.amount), 0);
   const currentBankroll  = totalDeposits - totalWithdrawals;
 
+  function showNotification(type, msg) {
+    setNotification({ type, msg });
+    setTimeout(() => setNotification(null), 3500);
+  }
+
+  // try/finally garantiert: reloadEvents() wird IMMER aufgerufen,
+  // auch wenn api.createDeposit() einen Fehler wirft.
   async function handle_deposit_success(formData) {
     try {
-      await api.createDeposit(formData.amount, formData.notes ?? "");
-      await reload();
+      await api.createDeposit(userId, formData.amount, formData.notes ?? "");
+      showNotification("success", `Einzahlung von €${Number(formData.amount).toFixed(2)} erfasst!`);
       setTimeout(() => onNavigate("history"), 1600);
     } catch (e) {
-      console.error("Deposit fehlgeschlagen:", e);
+      showNotification("error", `Fehler beim Speichern: ${e.message}`);
+    } finally {
+      await reloadEvents();
     }
   }
 
   async function handle_withdrawal_success(formData) {
     try {
-      await api.createWithdrawal(formData.amount, formData.notes ?? "");
-      await reload();
+      await api.createWithdrawal(userId, formData.amount, formData.notes ?? "");
+      showNotification("success", `Auszahlung von €${Number(formData.amount).toFixed(2)} erfasst!`);
       setTimeout(() => onNavigate("history"), 1600);
     } catch (e) {
-      console.error("Withdrawal fehlgeschlagen:", e);
+      showNotification("error", `Fehler beim Speichern: ${e.message}`);
+    } finally {
+      await reloadEvents();
     }
   }
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", maxWidth: "960px" }}>
-      <AddDeposit onSuccess={handle_deposit_success} />
-      <RecordWithdrawal
-        currentBankroll={currentBankroll}
-        onSuccess={handle_withdrawal_success}
-      />
+    <div>
+      {notification && (
+        <div style={{
+          padding: "12px 18px", borderRadius: "10px", marginBottom: "16px",
+          background: notification.type === "success" ? COLORS.greenMuted : COLORS.redMuted,
+          border: `1px solid ${notification.type === "success" ? COLORS.green : COLORS.red}40`,
+          color:  notification.type === "success" ? COLORS.greenText : COLORS.redText,
+          fontSize: "13px", fontWeight: "600",
+          display: "flex", alignItems: "center", gap: "8px",
+        }}>
+          {notification.type === "success" ? "✓" : "✕"} {notification.msg}
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", maxWidth: "960px" }}>
+        <AddDeposit userId={userId} onSuccess={handle_deposit_success} />
+        <RecordWithdrawal
+          currentBankroll={currentBankroll}
+          onSuccess={handle_withdrawal_success}
+        />
+      </div>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HISTORY VIEW — holt Bankroll-Events direkt von der API
+// HISTORY VIEW
 // ─────────────────────────────────────────────────────────────────────────────
 
-function HistoryView() {
-  const { events, loading, error } = useBankrollEvents();
-
-  const totalDeposits    = events.filter(e => e.event_type === "deposit").reduce((s, e) => s + e.amount, 0);
-  const totalWithdrawals = events.filter(e => e.event_type === "withdrawal").reduce((s, e) => s + e.amount, 0);
+function HistoryView({ events, eventsLoading, eventsError }) {
+  const totalDeposits    = events.filter(e => e.event_type?.toUpperCase() === "DEPOSIT"   ).reduce((s, e) => s + Math.abs(e.amount), 0);
+  const totalWithdrawals = events.filter(e => e.event_type?.toUpperCase() === "WITHDRAWAL").reduce((s, e) => s + Math.abs(e.amount), 0);
   const balance          = totalDeposits - totalWithdrawals;
 
-  if (loading) return <div style={css.loadingText}>Lade Transaktionshistorie…</div>;
+  if (eventsLoading) return <div style={css.loadingText}>Lade Transaktionshistorie…</div>;
 
   return (
     <div>
-      {error && <div style={css.errorText}>Fehler beim Laden: {error}</div>}
+      {eventsError && <div style={css.errorText}>Fehler beim Laden: {eventsError}</div>}
 
-      {/* Balance-Karten */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px", marginBottom: "20px" }}>
         {[
           { label: "Aktuelle Bankroll", value: `€${balance.toFixed(2)}`,           color: COLORS.text      },
@@ -613,7 +699,6 @@ function HistoryView() {
         ))}
       </div>
 
-      {/* Event-Liste */}
       <div style={css.card}>
         <div style={css.sectionTitle}>
           <span>Alle Einträge</span>
@@ -633,26 +718,26 @@ function HistoryView() {
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
               <div style={{
                 width: "38px", height: "38px", borderRadius: "50%", flexShrink: 0,
-                background: ev.event_type === "deposit" ? COLORS.greenMuted : COLORS.redMuted,
+                background: ev.event_type?.toUpperCase() === "DEPOSIT" ? COLORS.greenMuted : COLORS.redMuted,
                 display: "flex", alignItems: "center", justifyContent: "center",
-                color: ev.event_type === "deposit" ? COLORS.greenText : COLORS.redText, fontSize: "16px",
+                color: ev.event_type?.toUpperCase() === "DEPOSIT" ? COLORS.greenText : COLORS.redText, fontSize: "16px",
               }}>
-                {ev.event_type === "deposit" ? "↑" : "↓"}
+                {ev.event_type?.toUpperCase() === "DEPOSIT" ? "↑" : "↓"}
               </div>
               <div>
                 <div style={{ fontSize: "14px", fontWeight: "600", color: COLORS.text }}>
-                  {ev.event_type === "deposit" ? "Einzahlung" : "Auszahlung"}
+                  {ev.event_type?.toUpperCase() === "DEPOSIT" ? "Einzahlung" : "Auszahlung"}
                 </div>
                 <div style={{ fontSize: "12px", color: COLORS.textMuted }}>
-                  {ev.created_at ? new Date(ev.created_at).toLocaleDateString("de-AT") : ""}
+                  {ev.occurred_at ? new Date(ev.occurred_at).toLocaleDateString("de-AT") : ""}
                 </div>
                 {ev.notes && (
                   <div style={{ fontSize: "12px", color: COLORS.textDim, marginTop: "2px" }}>{ev.notes}</div>
                 )}
               </div>
             </div>
-            <div style={{ fontSize: "18px", fontWeight: "800", color: ev.event_type === "deposit" ? COLORS.greenText : COLORS.redText }}>
-              {ev.event_type === "deposit" ? "+" : "-"}€{ev.amount.toFixed(2)}
+            <div style={{ fontSize: "18px", fontWeight: "800", color: ev.event_type?.toUpperCase() === "DEPOSIT" ? COLORS.greenText : COLORS.redText }}>
+              {ev.event_type?.toUpperCase() === "DEPOSIT" ? "+" : "-"}€{ev.amount.toFixed(2)}
             </div>
           </div>
         ))}
@@ -661,43 +746,29 @@ function HistoryView() {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE CONFIRM MODAL
+// ─────────────────────────────────────────────────────────────────────────────
+
 function DeleteConfirmModal({ session, onConfirm, onCancel }) {
   if (!session) return null;
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 1000,
-      background: "rgba(0,0,0,0.6)", display: "flex",
-      alignItems: "center", justifyContent: "center",
-    }}>
-      <div style={{
-        background: COLORS.card, border: `1px solid ${COLORS.border}`,
-        borderRadius: "14px", padding: "28px 32px", maxWidth: "400px", width: "90%",
-        boxShadow: "0 8px 40px rgba(0,0,0,0.5)",
-      }}>
-        <div style={{ fontSize: "16px", fontWeight: "700", color: COLORS.text, marginBottom: "8px" }}>
-          Session löschen?
-        </div>
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: "14px", padding: "28px 32px", maxWidth: "400px", width: "90%", boxShadow: "0 8px 40px rgba(0,0,0,0.5)" }}>
+        <div style={{ fontSize: "16px", fontWeight: "700", color: COLORS.text, marginBottom: "8px" }}>Session löschen?</div>
         <div style={{ fontSize: "13px", color: COLORS.textMuted, marginBottom: "20px", lineHeight: 1.6 }}>
-          Die Session vom <strong style={{ color: COLORS.text }}>{session.date}</strong> auf{" "}
-          <strong style={{ color: COLORS.text }}>{session.platform}</strong> (
-          {session.game_mode === "cashgame" ? "Cash" : "Turnier"},{" "}
+          Session vom <strong style={{ color: COLORS.text }}>
+            {session.started_at ? new Date(session.started_at).toLocaleDateString("de-AT") : "—"}
+          </strong>{" "}
+          ({session.game_mode === "cashgame" ? "Cash" : "Turnier"},{" "}
           <span style={{ color: session.profit >= 0 ? COLORS.greenText : COLORS.redText, fontWeight: "700" }}>
             {session.profit >= 0 ? "+" : ""}€{session.profit}
           </span>
           ) wird unwiderruflich entfernt.
         </div>
         <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-          <button onClick={onCancel} style={{ ...css.btnSecondary }}>
-            Abbrechen
-          </button>
-          <button
-            onClick={() => onConfirm(session.id)}
-            style={{
-              ...css.btnPrimary,
-              background: COLORS.red,
-              color: COLORS.white,
-            }}
-          >
+          <button onClick={onCancel} style={{ ...css.btnSecondary }}>Abbrechen</button>
+          <button onClick={() => onConfirm(session.id)} style={{ ...css.btnPrimary, background: COLORS.red, color: COLORS.white }}>
             <Icon.Trash /> Löschen
           </button>
         </div>
@@ -706,30 +777,56 @@ function DeleteConfirmModal({ session, onConfirm, onCancel }) {
   );
 }
 
-function SessionsView() {
-  const { sessions, loading, error, reload } = useSessions();
-  const [showCreateForm, setShowCreateForm] = useState(false);
+// ─────────────────────────────────────────────────────────────────────────────
+// SESSIONS VIEW
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SessionsView({ userId }) {
+  const { sessions, loading, error, reload } = useSessions(userId);
+  const platforms = usePlatforms();
+  const [showCreateForm,  setShowCreateForm]  = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState(null);
 
-  const handleAddSession = async (newSession) => {
-    try {
-      await api.createSession(
-        newSession.game_mode_id,
-        newSession.platform_id,
-        newSession.notes
-      );
-      await reload();
-      setShowCreateForm(false);
-    } catch (e) {
-      console.error("Session erstellen fehlgeschlagen:", e);
+  const handleAddSession = async (formData) => {
+    const game_mode_id = GAME_MODE_ID[formData.game_mode] ?? 1;
+
+    const session = await api.createSession(
+      userId,
+      game_mode_id,
+      formData.platform_id ?? null,
+      formData.notes ?? null,
+    );
+    if (!session.id) {
+      throw new Error(session.error ?? "Session konnte nicht erstellt werden.");
     }
+
+    if (formData.game_mode === "cashgame") {
+      await api.createCashSession(session.id, formData.buy_in, formData.cash_out);
+    } else {
+      const rebuys_total = formData.rebuys ?? 0;
+      const addons_total = formData.addons ?? 0;
+      await api.createTournament(session.id, formData.buy_in, {
+        fee:         formData.fee    ?? null,
+        rebuys:      rebuys_total > 0 ? 1 : 0,
+        rebuy_cost:  rebuys_total > 0 ? rebuys_total : null,
+        add_ons:     addons_total > 0 ? 1 : 0,
+        add_on_cost: addons_total > 0 ? addons_total : null,
+        winnings:    formData.winnings ?? 0,
+      });
+    }
+
+    await reload();
   };
 
-  const handleDeleteConfirm = (id) => {
-    const updated = sessions.filter((s) => s.id !== id);
-    setSessions(updated);
-    saveSessions(updated);
-    setSessionToDelete(null);
+  const handleDeleteConfirm = async (id) => {
+    try {
+      await api.deleteSession(id);
+      await reload();
+    } catch (e) {
+      console.error("Löschen fehlgeschlagen:", e);
+    } finally {
+      setSessionToDelete(null);
+    }
   };
 
   return (
@@ -746,20 +843,23 @@ function SessionsView() {
             <Icon.Plus /> Neue Session erfassen
           </button>
         ) : (
-          <CreateSession onSuccess={handleAddSession} onCancel={() => setShowCreateForm(false)} />
+          <CreateSession
+            platforms={platforms}
+            onSuccess={handleAddSession}
+            onCancel={() => setShowCreateForm(false)}
+          />
         )}
       </div>
 
       <div style={css.card}>
         <div style={css.sectionTitle}><span>Alle Sessions</span></div>
-
         {loading && <div style={css.loadingText}>Lade Sessions…</div>}
-        {error && <div style={css.errorText}>Fehler: {error}</div>}
+        {error   && <div style={css.errorText}>Fehler: {error}</div>}
 
         {!loading && !error && (
           <>
             <div style={{ ...css.tableRow, borderBottom: `1px solid ${COLORS.borderLight}`, paddingBottom: "6px" }}>
-              {["Datum","Modus","Plattform","Notiz","Profit"].map((h, i) => (
+              {["Datum","Modus","Plattform","Notiz","Profit",""].map((h, i) => (
                 <div key={i} style={{ fontSize: "10px", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, fontWeight: "600" }}>{h}</div>
               ))}
             </div>
@@ -774,12 +874,20 @@ function SessionsView() {
                   {s.started_at ? new Date(s.started_at).toLocaleDateString("de-AT") : "—"}
                 </div>
                 <div><span style={css.tag(s.game_mode === "cashgame" ? "green" : "gold")}>{s.game_mode === "cashgame" ? "Cash" : "Turnier"}</span></div>
-                <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{s.platform_id ?? "—"}</div>
+                <div style={{ fontSize: "12px", color: COLORS.textMuted }}>
+                  {platforms.find(p => p.id === s.platform_id)?.name ?? s.platform_id ?? "—"}
+                </div>
                 <div style={{ fontSize: "12px", color: COLORS.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.notes || "—"}</div>
                 <div style={{ display: "flex", alignItems: "center", gap: "4px", ...css.profit(s.profit) }}>
                   {s.profit >= 0 ? <Icon.TrendUp /> : <Icon.TrendDown />}
                   {s.profit >= 0 ? "+" : ""}€{s.profit}
                 </div>
+                <button
+                  onClick={() => setSessionToDelete(s)}
+                  style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textDim, padding: "4px", borderRadius: "6px" }}
+                >
+                  <Icon.Trash />
+                </button>
               </div>
             ))}
           </>
@@ -790,33 +898,29 @@ function SessionsView() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STATS VIEW — alle Daten live von der API
+// STATS VIEW
 // ─────────────────────────────────────────────────────────────────────────────
 
-function StatsView() {
-  const { events } = useBankrollEvents();
-  const { sessions } = useSessions();
-  const snapshots = useSnapshots();
+function StatsView({ userId, events }) {
+  const { sessions } = useSessions(userId);
+  const snapshots    = useSnapshots(userId);
 
-  const totalDeposits    = events.filter(e => e.event_type === "deposit").reduce((s, e) => s + e.amount, 0);
-  const totalWithdrawals = events.filter(e => e.event_type === "withdrawal").reduce((s, e) => s + e.amount, 0);
+  const totalDeposits    = events.filter(e => e.event_type?.toUpperCase() === "DEPOSIT"   ).reduce((s, e) => s + Math.abs(e.amount), 0);
+  const totalWithdrawals = events.filter(e => e.event_type?.toUpperCase() === "WITHDRAWAL").reduce((s, e) => s + Math.abs(e.amount), 0);
   const balance          = totalDeposits - totalWithdrawals;
 
   const profits  = sessions.map(s => s.profit).filter(p => p !== undefined);
   const winRate  = profits.length > 0 ? ((profits.filter(p => p > 0).length / profits.length) * 100).toFixed(1) : "—";
 
-  // Chart-Daten aus Snapshots
   const chartData = snapshots.map(s => ({
     label: new Date(s.recorded_at).toLocaleDateString("de-AT", { month: "short" }),
     value: s.amount,
   }));
 
-  // Sessions nach Modus
-  const cashSessions   = sessions.filter(s => s.game_mode === "cashgame");
-  const tournSessions  = sessions.filter(s => s.game_mode === "tournament");
-  const total          = sessions.length || 1;
+  const cashSessions  = sessions.filter(s => s.game_mode === "cashgame");
+  const tournSessions = sessions.filter(s => s.game_mode === "tournament");
+  const total         = sessions.length || 1;
 
-  // Sessions nach Monat (letzten 4 Monate)
   const monthCounts = {};
   sessions.forEach(s => {
     if (!s.started_at) return;
@@ -824,7 +928,7 @@ function StatsView() {
     monthCounts[key] = (monthCounts[key] || 0) + 1;
   });
   const monthEntries = Object.entries(monthCounts).slice(-4);
-  const maxMonth = Math.max(...monthEntries.map(([,v]) => v), 1);
+  const maxMonth     = Math.max(...monthEntries.map(([, v]) => v), 1);
 
   return (
     <div>
@@ -832,7 +936,7 @@ function StatsView() {
         {[
           { label: "Gesamt Bankroll",  value: `€${balance.toFixed(2)}`, color: "green" },
           { label: "Sessions gesamt",  value: sessions.length,           color: "text"  },
-          { label: "Deposits",         value: events.filter(e => e.event_type === "deposit").length, color: "text" },
+          { label: "Deposits",         value: events.filter(e => e.event_type?.toUpperCase() === "DEPOSIT").length, color: "text" },
           { label: "Gewinnrate",       value: `${winRate}%`,             color: "gold"  },
         ].map((item, i) => (
           <div key={i} style={css.statCard}>
@@ -851,7 +955,7 @@ function StatsView() {
         <div style={css.card}>
           <div style={css.sectionTitle}>Sessions nach Modus</div>
           {[
-            { label: "Cashgame", count: cashSessions.length,  pct: Math.round((cashSessions.length / total) * 100),  color: COLORS.green },
+            { label: "Cashgame", count: cashSessions.length,  pct: Math.round((cashSessions.length  / total) * 100), color: COLORS.green },
             { label: "Turnier",  count: tournSessions.length, pct: Math.round((tournSessions.length / total) * 100), color: COLORS.gold  },
           ].map((item, i) => (
             <div key={i} style={{ marginBottom: "12px" }}>
@@ -889,11 +993,11 @@ function StatsView() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const VIEWS = [
-  { id: "dashboard",     label: "Dashboard",    Icon: Icon.Dashboard },
-  { id: "transaktionen", label: "Transaktionen",Icon: Icon.Bankroll  },
-  { id: "history",       label: "History",      Icon: Icon.History   },
-  { id: "sessions",      label: "Sessions",     Icon: Icon.Sessions  },
-  { id: "stats",         label: "Statistiken",  Icon: Icon.Stats     },
+  { id: "dashboard",     label: "Dashboard",     Icon: Icon.Dashboard },
+  { id: "transaktionen", label: "Transaktionen", Icon: Icon.Bankroll  },
+  { id: "history",       label: "History",       Icon: Icon.History   },
+  { id: "sessions",      label: "Sessions",      Icon: Icon.Sessions  },
+  { id: "stats",         label: "Statistiken",   Icon: Icon.Stats     },
 ];
 
 const VIEW_META = {
@@ -910,23 +1014,86 @@ const VIEW_META = {
 
 export default function PokerBankrollManager() {
   const [activeView, setActiveView] = useState("dashboard");
+  const [user,       setUser]       = useState(null); // { id, username }
 
-  const renderView = () => {
-    switch (activeView) {
-      case "dashboard":     return <DashboardView />;
-      case "transaktionen": return <TransaktionenView onNavigate={setActiveView} />;
-      case "history":       return <HistoryView />;
-      case "sessions":      return <SessionsView />;
-      case "stats":         return <StatsView />;
-      default:              return <DashboardView />;
-    }
+  // FIX 1 + 2 + 3: Events werden auf Hauptkomponenten-Ebene gehalten.
+  // → Kein /user/undefined-Request (Guard im Hook)
+  // → reloadEvents kann an alle Views weitergegeben werden (FIX 2)
+  // → handleLogout setzt Events sofort zurück (FIX 3)
+  const {
+    events,
+    loading: eventsLoading,
+    error:   eventsError,
+    reload:  reloadEvents,
+  } = useBankrollEvents(user?.id);
+
+  // FIX 3: Beim Abmelden wird user auf null gesetzt.
+  //        Der Hook reagiert auf user?.id → undefined und leert events[] sofort.
+  //        Kein anderer User sieht je die Transaktionen eines anderen Profils.
+  const handleLogout = () => {
+    setUser(null);
+    // events werden automatisch durch den Hook auf [] gesetzt,
+    // da user?.id nach setUser(null) undefined ist.
   };
+
+  // Nicht eingeloggt → AuthScreen anzeigen
+  if (!user) {
+    return <AuthScreen onAuth={(u) => setUser(u)} />;
+  }
 
   const meta = VIEW_META[activeView];
 
+  const renderView = () => {
+    switch (activeView) {
+      case "dashboard":
+        return (
+          <DashboardView
+            userId={user.id}
+            events={events}
+            eventsLoading={eventsLoading}
+            eventsError={eventsError}
+          />
+        );
+      case "transaktionen":
+        return (
+          <TransaktionenView
+            userId={user.id}
+            events={events}
+            reloadEvents={reloadEvents}    // FIX 2: Callback für sofortiges Neuladen
+            onNavigate={setActiveView}
+          />
+        );
+      case "history":
+        return (
+          <HistoryView
+            events={events}
+            eventsLoading={eventsLoading}
+            eventsError={eventsError}
+          />
+        );
+      case "sessions":
+        return <SessionsView userId={user.id} />;
+      case "stats":
+        return (
+          <StatsView
+            userId={user.id}
+            events={events}
+          />
+        );
+      default:
+        return (
+          <DashboardView
+            userId={user.id}
+            events={events}
+            eventsLoading={eventsLoading}
+            eventsError={eventsError}
+          />
+        );
+    }
+  };
+
   return (
     <div style={css.app}>
-      {/* Sidebar */}
       <div style={css.sidebar}>
         <div style={css.logo}>
           <div style={css.logoIcon}><Icon.Chips /></div>
@@ -943,20 +1110,36 @@ export default function PokerBankrollManager() {
             </button>
           ))}
         </nav>
+
+        {/* ── User-Info + Logout ── */}
         <div style={{ padding: "16px", borderTop: `1px solid ${COLORS.border}` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 10px", borderRadius: "8px", background: COLORS.card }}>
-            <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: COLORS.greenMuted, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "700", color: COLORS.greenText }}>
-              PL
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 10px", borderRadius: "8px", background: COLORS.card, marginBottom: "8px" }}>
+            <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: COLORS.greenMuted, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "700", color: COLORS.greenText, flexShrink: 0 }}>
+              {user.username.slice(0, 2).toUpperCase()}
             </div>
-            <div>
-              <div style={{ fontSize: "12px", fontWeight: "600", color: COLORS.text }}>Player</div>
-              <div style={{ fontSize: "10px", color: COLORS.textDim }}>poker@example.com</div>
+            <div style={{ overflow: "hidden" }}>
+              <div style={{ fontSize: "12px", fontWeight: "600", color: COLORS.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {user.username}
+              </div>
+              <div style={{ fontSize: "10px", color: COLORS.textDim }}>ID #{user.id}</div>
             </div>
           </div>
+          {/* FIX 3: handleLogout statt inline setUser(null) */}
+          <button
+            onClick={handleLogout}
+            style={{
+              width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
+              gap: "6px", padding: "7px", borderRadius: "7px",
+              background: "transparent", border: `1px solid ${COLORS.border}`,
+              color: COLORS.textDim, fontSize: "12px", fontWeight: "500",
+              cursor: "pointer", fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
+            }}
+          >
+            <Icon.Logout /> Abmelden
+          </button>
         </div>
       </div>
 
-      {/* Main Content */}
       <div style={css.main}>
         <div style={css.topbar}>
           <div>
