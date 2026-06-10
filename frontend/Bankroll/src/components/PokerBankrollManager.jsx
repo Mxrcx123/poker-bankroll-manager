@@ -2,51 +2,33 @@ import { useState, useEffect } from "react";
 import AddDeposit from "./AddDeposit.jsx";
 import RecordWithdrawal from "./RecordWithdrawl.jsx";
 import CreateSession from "./CreateSession.jsx";
+import * as sessionsApi from "../services/sessionsApi.js";
+import * as bankrollApi from "../services/bankrollApi.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MOCK DATA — später durch API-Calls ersetzen
+// MOCK DATA — Fallback wenn API nicht erreichbar
 // ─────────────────────────────────────────────────────────────────────────────
-
-const MOCK_BANKROLL = {
-  current: 1340.0,
-  totalDeposits: 1000.0,
-  totalWithdrawals: 200.0,
-  netProfit: 540.0,
-};
 
 const MOCK_STATS = {
-  totalSessions: 47,
-  winRate: 61.7,
-  avgProfit: 11.49,
-  bestSession: 320.0,
-  worstSession: -85.0,
-  totalHours: 138,
+  totalSessions: 0,
+  winRate: 0,
+  avgProfit: 0,
+  bestSession: 0,
+  worstSession: -0,
+  totalHours: 0,
 };
 
-const MOCK_SESSIONS = [
-  { id: 1, date: "2026-04-07", game_mode: "cashgame",   platform: "PokerStars", buy_in: 50,  cash_out: 118, profit: 68,   notes: "Gutes Spiel, Position gut genutzt" },
-  { id: 2, date: "2026-04-05", game_mode: "tournament", platform: "GGPoker",    buy_in: 22,  fee: 2, rebuys: 0, winnings: 0,  profit: -24, notes: "Bad beat am Bubble" },
-  { id: 3, date: "2026-04-03", game_mode: "cashgame",   platform: "PokerStars", buy_in: 100, cash_out: 240, profit: 140, notes: "" },
-  { id: 4, date: "2026-04-01", game_mode: "tournament", platform: "888poker",   buy_in: 10,  fee: 1, rebuys: 1, winnings: 85, profit: 63,  notes: "3. Platz" },
-  { id: 5, date: "2026-03-29", game_mode: "cashgame",   platform: "PokerStars", buy_in: 50,  cash_out: 35, profit: -15, notes: "" },
-  { id: 6, date: "2026-03-27", game_mode: "cashgame",   platform: "GGPoker",    buy_in: 100, cash_out: 185, profit: 85,  notes: "Nits geblufft" },
-];
+const MOCK_BANKROLL_EVENTS = [];
 
-const MOCK_BANKROLL_EVENTS = [
-  { id: 1, type: "deposit",    amount: 500, date: "2026-01-10", notes: "" },
-  { id: 2, type: "deposit",    amount: 500, date: "2026-02-15", notes: "" },
-  { id: 3, type: "withdrawal", amount: 200, date: "2026-03-01", notes: "" },
-];
-
+// Fallback Chart-Daten (leer oder minimal)
 const MOCK_CHART_DATA = [
-  { label: "Jan", value: 500 },
-  { label: "Feb", value: 680 },
-  { label: "Mär", value: 920 },
-  { label: "Apr", value: 1340 },
+  { label: "Jan", value: 0 },
 ];
+
+const DEFAULT_USER_ID = 1; // Default user ID (später aus Auth)
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LOCALSTORAGE HELPERS — von EinzahlungView und HistoryView genutzt
+// LOCALSTORAGE HELPERS — für Caching und Offline-Unterstützung
 // ─────────────────────────────────────────────────────────────────────────────
 
 function loadEvents() {
@@ -62,17 +44,133 @@ function saveEvents(events) {
   localStorage.setItem("bankroll_events", JSON.stringify(events));
 }
 
-function loadSessions() {
+// Synchrone Funktion - liest nur localStorage
+function loadSessionsSync() {
   try {
     const raw = localStorage.getItem("bankroll_sessions");
-    return raw ? JSON.parse(raw) : MOCK_SESSIONS;
+    return raw ? JSON.parse(raw) : [];
   } catch {
-    return MOCK_SESSIONS;
+    return [];
   }
+}
+
+// Asynchrone Funktion - lädt von API, speichert in localStorage
+async function loadSessionsAsync() {
+  try {
+    const sessions = await sessionsApi.getSessionsByUser(DEFAULT_USER_ID);
+    if (sessions && sessions.length > 0) {
+      localStorage.setItem("bankroll_sessions", JSON.stringify(sessions));
+      return sessions;
+    }
+  } catch (error) {
+    console.warn("API nicht erreichbar, verwende Cache:", error);
+  }
+  
+  // Fallback auf lokale Daten
+  return loadSessionsSync();
 }
 
 function saveSessions(sessions) {
   localStorage.setItem("bankroll_sessions", JSON.stringify(sessions));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BANKROLL EVENTS LOADING — lädt von API oder localStorage
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Synchrone Funktion - liest nur localStorage
+function loadBankrollEventsSync() {
+  try {
+    const raw = localStorage.getItem("bankroll_events");
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+// Asynchrone Funktion - lädt von API, speichert in localStorage
+async function loadBankrollEventsAsync() {
+  try {
+    const events = await bankrollApi.getBankrollEventsByUser(DEFAULT_USER_ID);
+    if (events && events.length > 0) {
+      // Konvertiere die API-Antwort ins lokale Format
+      const mappedEvents = events.map(e => ({
+        id: e.id,
+        type: e.event_type,
+        amount: e.amount,
+        date: e.created_at ? e.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
+        notes: e.notes || ""
+      }));
+      localStorage.setItem("bankroll_events", JSON.stringify(mappedEvents));
+      return mappedEvents;
+    }
+  } catch (error) {
+    console.warn("API nicht erreichbar, verwende Cache:", error);
+  }
+  
+  // Fallback auf lokale Daten
+  return loadBankrollEventsSync();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BANKROLL CALCULATION — berechnet aktuelle Bankroll aus Transaktionen + Sessions
+// ─────────────────────────────────────────────────────────────────────────────
+
+function getCurrentBankroll() {
+  const events = loadEvents();
+  const depositsWithdrawals = events.reduce((s, e) => e.type === "deposit" ? s + e.amount : s - e.amount, 0);
+  const sessionsData = localStorage.getItem("bankroll_sessions");
+  const sessions = sessionsData ? JSON.parse(sessionsData) : [];
+  const sessionProfit = sessions.reduce((s, session) => s + (session.profit || 0), 0);
+  return depositsWithdrawals + sessionProfit;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CHART DATA GENERATION — generiert Monatsdaten für das aktuelle Jahr
+// ─────────────────────────────────────────────────────────────────────────────
+
+function generateChartData(events, sessions) {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+  const monthLabels = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+  
+  const chartData = [];
+  let cumulativeBalance = 0;
+  
+  for (let month = 0; month <= currentMonth; month++) {
+    const monthStart = new Date(currentYear, month, 1);
+    const monthEnd = new Date(currentYear, month + 1, 0, 23, 59, 59);
+    
+    // Filtere Events für diesen Monat
+    const monthEvents = events.filter(e => {
+      const eventDate = new Date(e.date);
+      return eventDate >= monthStart && eventDate <= monthEnd;
+    });
+    
+    // Filtere Sessions für diesen Monat
+    const monthSessions = sessions.filter(s => {
+      const sessionDate = new Date(s.date || s.started_at || new Date());
+      return sessionDate >= monthStart && sessionDate <= monthEnd;
+    });
+    
+    // Berechne Gewinn/Verlust für diesen Monat
+    const eventsBalance = monthEvents.reduce((sum, e) =>
+      e.type === "deposit" ? sum + e.amount : sum - e.amount, 0
+    );
+    const sessionsProfit = monthSessions.reduce((sum, s) => sum + (s.profit || 0), 0);
+    const monthProfit = eventsBalance + sessionsProfit;
+    
+    // Kumulierter Gewinn/Verlust
+    cumulativeBalance += monthProfit;
+    
+    chartData.push({
+      label: monthLabels[month],
+      value: cumulativeBalance
+    });
+  }
+  
+  return chartData.length > 0 ? chartData : MOCK_CHART_DATA;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -312,10 +410,27 @@ function BankrollChart({ data }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function DashboardView() {
-  // Dashboard liest Balance direkt aus localStorage
+  // Dashboard liest Balance aus Transaktionen + Sessions (initial sync)
+  const [sessions, setSessions] = useState(() => loadSessionsSync());
+  const [chartData, setChartData] = useState(() => generateChartData(loadEvents(), loadSessionsSync()));
   const events = loadEvents();
-  const balance = events.reduce((s, e) => e.type === "deposit" ? s + e.amount : s - e.amount, 0);
+  const balance = getCurrentBankroll();
+  const depositsWithdrawals = events.reduce((s, e) => e.type === "deposit" ? s + e.amount : s - e.amount, 0);
+  const sessionProfit = sessions.reduce((s, session) => s + (session.profit || 0), 0);
   const profitPositive = balance >= 0;
+
+  // Lade Sessions von API im Hintergrund und aktualisiere Chart-Daten
+  useEffect(() => {
+    loadSessionsAsync().then(loadedSessions => {
+      setSessions(loadedSessions);
+      setChartData(generateChartData(events, loadedSessions));
+    });
+  }, []);
+
+  // Aktualisiere Chart-Daten wenn Events sich ändern
+  useEffect(() => {
+    setChartData(generateChartData(events, sessions));
+  }, [events, sessions]);
 
   return (
     <div>
@@ -330,16 +445,16 @@ function DashboardView() {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "10px" }}>
               <span style={css.tag(profitPositive ? "green" : "red")}>{profitPositive ? "↑" : "↓"} Bankroll</span>
-              <span style={{ fontSize: "12px", color: COLORS.textMuted }}>{events.length} Events gesamt</span>
+              <span style={{ fontSize: "12px", color: COLORS.textMuted }}>{events.length} Transaktionen + {sessions.length} Sessions</span>
             </div>
           </div>
-          <div style={{ width: "200px" }}><SparkChart data={MOCK_CHART_DATA} /></div>
+          <div style={{ width: "200px" }}><SparkChart data={chartData} /></div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0", marginTop: "20px", borderTop: `1px solid ${COLORS.green}20`, paddingTop: "16px" }}>
           {[
             { label: "Eingezahlt", value: `€${events.filter(e=>e.type==="deposit").reduce((s,e)=>s+e.amount,0).toFixed(0)}` },
-            { label: "Ausgezahlt", value: `€${events.filter(e=>e.type==="withdrawal").reduce((s,e)=>s+e.amount,0).toFixed(0)}` },
-            { label: "Sessions",   value: MOCK_STATS.totalSessions },
+            { label: "Sessions Profit", value: `${sessionProfit >= 0 ? "+" : ""}€${sessionProfit.toFixed(0)}` },
+            { label: "Sessions",   value: sessions.length },
           ].map((item, i) => (
             <div key={i} style={{ textAlign: i === 1 ? "center" : i === 2 ? "right" : "left" }}>
               <div style={{ fontSize: "11px", color: COLORS.textDim, letterSpacing: "0.06em", textTransform: "uppercase" }}>{item.label}</div>
@@ -370,7 +485,7 @@ function DashboardView() {
       <div style={css.grid3}>
         <div style={css.card}>
           <div style={css.sectionTitle}><span>Bankroll-Entwicklung</span><span style={{ fontSize: "11px", color: COLORS.textDim, fontWeight: "400", textTransform: "none", letterSpacing: 0 }}>2026</span></div>
-          <BankrollChart data={MOCK_CHART_DATA} />
+          <BankrollChart data={chartData} />
         </div>
         <div style={css.card}>
           <div style={css.sectionTitle}>Letzte Events</div>
@@ -398,7 +513,7 @@ function DashboardView() {
             <div key={i} style={{ fontSize: "10px", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, fontWeight: "600" }}>{h}</div>
           ))}
         </div>
-        {MOCK_SESSIONS.slice(0, 5).map((s) => (
+         {MOCK_BANKROLL_EVENTS.slice(0, 5).map((s) => (
           <div key={s.id} style={css.tableRow}>
             <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{s.date.slice(5)}</div>
             <div><span style={css.tag(s.game_mode === "cashgame" ? "green" : "gold")}>{s.game_mode === "cashgame" ? "Cash" : "Turnier"}</span></div>
@@ -433,9 +548,7 @@ function TransaktionenView({ onNavigate }) {
   }
 
   const events = loadEvents();
-  const current_bankroll = events.reduce(
-    (s, e) => e.type === "deposit" ? s + e.amount : s - e.amount, 0
-  );
+  const current_bankroll = getCurrentBankroll();
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", maxWidth: "960px" }}>
@@ -453,16 +566,34 @@ function TransaktionenView({ onNavigate }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function HistoryView() {
-  const [events, setEvents] = useState(() => loadEvents());
+  const [events, setEvents] = useState(() => loadBankrollEventsSync());
+  const [sessions, setSessions] = useState(() => loadSessionsSync());
+  const [loading, setLoading] = useState(true);
 
-  // Beim Mounten immer frisch aus localStorage laden
+  // Beim Mounten lade Events und Sessions von API
   useEffect(() => {
-    setEvents(loadEvents());
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const [eventsData, sessionsData] = await Promise.all([
+          loadBankrollEventsAsync(),
+          loadSessionsAsync()
+        ]);
+        setEvents(eventsData || []);
+        setSessions(sessionsData || []);
+      } catch (error) {
+        console.error("Error loading history data:", error);
+      }
+      setLoading(false);
+    };
+    fetchData();
   }, []);
 
   const totalDeposits    = events.filter(e => e.type === "deposit").reduce((s, e) => s + e.amount, 0);
   const totalWithdrawals = events.filter(e => e.type === "withdrawal").reduce((s, e) => s + e.amount, 0);
-  const balance          = totalDeposits - totalWithdrawals;
+  const transactionBalance = totalDeposits - totalWithdrawals;
+  const sessionProfit = sessions.reduce((s, session) => s + (session.profit || 0), 0);
+  const balance = transactionBalance + sessionProfit;
 
   return (
     <div>
@@ -470,8 +601,8 @@ function HistoryView() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px", marginBottom: "20px" }}>
         {[
           { label: "Aktuelle Bankroll", value: `€${balance.toFixed(2)}`,           color: COLORS.text      },
-          { label: "Gesamt eingezahlt", value: `+€${totalDeposits.toFixed(2)}`,    color: COLORS.greenText },
-          { label: "Gesamt ausgezahlt", value: `-€${totalWithdrawals.toFixed(2)}`, color: COLORS.redText   },
+          { label: "Transaktionen", value: `${transactionBalance >= 0 ? "+" : ""}€${transactionBalance.toFixed(2)}`,    color: transactionBalance >= 0 ? COLORS.greenText : COLORS.redText },
+          { label: "Sessions Profit", value: `${sessionProfit >= 0 ? "+" : ""}€${sessionProfit.toFixed(2)}`, color: sessionProfit >= 0 ? COLORS.greenText : COLORS.redText   },
         ].map((item, i) => (
           <div key={i} style={css.statCard}>
             <div style={{ fontSize: "11px", letterSpacing: "0.06em", textTransform: "uppercase", color: COLORS.textDim, marginBottom: "6px" }}>{item.label}</div>
@@ -483,7 +614,7 @@ function HistoryView() {
       {/* Event-Liste */}
       <div style={css.card}>
         <div style={css.sectionTitle}>
-          <span>Alle Einträge</span>
+          <span>Alle Einträge {loading && "- Lädt..."}</span>
           <span style={{ fontSize: "12px", color: COLORS.textDim, fontWeight: "400", textTransform: "none", letterSpacing: 0 }}>
             {events.length} Einträge
           </span>
@@ -527,8 +658,20 @@ function HistoryView() {
 }
 
 function SessionsView() {
-  const [sessions, setSessions] = useState(loadSessions());
+  const [sessions, setSessions] = useState(() => loadSessionsSync());
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Lade Sessions beim Mount
+  useEffect(() => {
+    const fetchSessions = async () => {
+      setLoading(true);
+      const data = await loadSessionsAsync();
+      setSessions(data || []);
+      setLoading(false);
+    };
+    fetchSessions();
+  }, []);
 
   const handleAddSession = (newSession) => {
     const updated = [newSession, ...sessions];
@@ -556,10 +699,20 @@ function SessionsView() {
             <div key={i} style={{ fontSize: "10px", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, fontWeight: "600" }}>{h}</div>
           ))}
         </div>
+        {loading && (
+          <div style={{ textAlign: "center", padding: "20px", color: COLORS.textDim }}>
+            Lade Sessions...
+          </div>
+        )}
+        {!loading && sessions.length === 0 && (
+          <div style={{ textAlign: "center", padding: "20px", color: COLORS.textDim }}>
+            Keine Sessions erfasst.
+          </div>
+        )}
         {sessions.map((s) => (
           <div key={s.id} style={css.tableRow}>
-            <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{s.date}</div>
-            <div><span style={css.tag(s.game_mode === "cashgame" ? "green" : "gold")}>{s.game_mode === "cashgame" ? "Cash" : "Turnier"}</span></div>
+            <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{s.started_at ? s.started_at.split("T")[0] : s.date}</div>
+            <div><span style={css.tag(s.type === "cashgame" ? "green" : "gold")}>{s.type === "cashgame" ? "Cash" : "Turnier"}</span></div>
             <div style={{ fontSize: "12px", color: COLORS.textMuted }}>{s.platform}</div>
             <div style={{ fontSize: "12px", color: COLORS.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.notes || "—"}</div>
             <div style={{ display: "flex", alignItems: "center", gap: "4px", ...css.profit(s.profit) }}>
@@ -575,16 +728,32 @@ function SessionsView() {
 
 function StatsView() {
   const events = loadEvents();
+  const [sessions, setSessions] = useState(() => loadSessionsSync());
+  const [chartData, setChartData] = useState(() => generateChartData(events, loadSessionsSync()));
   const totalDeposits = events.filter(e => e.type === "deposit").reduce((s, e) => s + e.amount, 0);
   const totalWithdrawals = events.filter(e => e.type === "withdrawal").reduce((s, e) => s + e.amount, 0);
-  const balance = totalDeposits - totalWithdrawals;
+  const transactionBalance = totalDeposits - totalWithdrawals;
+  const balance = getCurrentBankroll();
+
+  // Lade Sessions von API im Hintergrund
+  useEffect(() => {
+    loadSessionsAsync().then(loadedSessions => {
+      setSessions(loadedSessions);
+      setChartData(generateChartData(events, loadedSessions));
+    });
+  }, []);
+
+  // Aktualisiere Chart-Daten wenn Events sich ändern
+  useEffect(() => {
+    setChartData(generateChartData(events, sessions));
+  }, [events, sessions]);
 
   return (
     <div>
       <div style={css.grid4}>
         {[
           { label: "Gesamt Bankroll",  value: `€${balance.toFixed(2)}`,               color: "green" },
-          { label: "Sessions gesamt",  value: MOCK_STATS.totalSessions,                color: "text"  },
+          { label: "Sessions gesamt",  value: sessions.length,                         color: "text"  },
           { label: "Stunden gespielt", value: MOCK_STATS.totalHours,                   color: "text"  },
           { label: "Gewinnrate",       value: `${MOCK_STATS.winRate}%`,                color: "gold"  },
         ].map((item, i) => (
@@ -598,7 +767,7 @@ function StatsView() {
       </div>
       <div style={css.card}>
         <div style={css.sectionTitle}>Bankroll-Entwicklung 2026</div>
-        <BankrollChart data={MOCK_CHART_DATA} />
+        <BankrollChart data={chartData} />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "16px" }}>
         <div style={css.card}>
