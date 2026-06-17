@@ -277,6 +277,11 @@ const Icon = {
       <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
     </svg>
   ),
+  Folder: () => (
+    <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+    </svg>
+  ),
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1728,6 +1733,459 @@ function ModeStatsCard({ title, color, sessions, profit, volume }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// EXPORT MODAL
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ExportModal({ userId, events, onClose }) {
+  const { sessions, loading: sessLoading } = useSessions(userId);
+
+  const [exportType, setExportType] = useState("sessions");  // "sessions" | "transaktionen" | "report"
+  const [period,     setPeriod]     = useState("all");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo,   setCustomTo]   = useState("");
+  const [mode,       setMode]       = useState("all");
+  const [filename,   setFilename]   = useState("poker_export");
+  const [exporting,  setExporting]  = useState(false);
+  const [result,     setResult]     = useState(null); // { ok: bool, msg: string }
+
+  // ── Speicherort (Ordner) ─────────────────────────────────────────────────────
+  const [dirHandle, setDirHandle] = useState(null);   // FileSystemDirectoryHandle | null
+  const dirPickerSupported = typeof window !== "undefined" && "showDirectoryPicker" in window;
+
+  const pickDirectory = useCallback(async () => {
+    if (!dirPickerSupported) return;
+    try {
+      const handle = await window.showDirectoryPicker({ mode: "readwrite" });
+      setDirHandle(handle);
+      setResult(null);
+    } catch (e) {
+      if (e.name !== "AbortError") {
+        setResult({ ok: false, msg: `Ordnerauswahl fehlgeschlagen: ${e.message}` });
+      }
+    }
+  }, [dirPickerSupported]);
+
+  const clearDirectory = useCallback(() => setDirHandle(null), []);
+
+  // ── Zeitraum-Filter ──────────────────────────────────────────────────────────
+  const applyPeriodFilter = useCallback((items, dateKey) => {
+    const now = new Date();
+    if (period === "month") {
+      return items.filter(i => {
+        if (!i[dateKey]) return false;
+        const d = new Date(i[dateKey]);
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      });
+    }
+    if (period === "year") {
+      return items.filter(i => {
+        if (!i[dateKey]) return false;
+        return new Date(i[dateKey]).getFullYear() === now.getFullYear();
+      });
+    }
+    if (period === "custom" && customFrom && customTo) {
+      const from = new Date(customFrom);
+      const to   = new Date(customTo); to.setHours(23, 59, 59, 999);
+      return items.filter(i => {
+        if (!i[dateKey]) return false;
+        const d = new Date(i[dateKey]);
+        return d >= from && d <= to;
+      });
+    }
+    return items;
+  }, [period, customFrom, customTo]);
+
+  const filteredSessions = useMemo(() => {
+    let s = applyPeriodFilter(sessions, "started_at");
+    if (mode !== "all") s = s.filter(x => x.game_mode === mode);
+    return s;
+  }, [sessions, applyPeriodFilter, mode]);
+
+  const filteredEvents = useMemo(() =>
+    applyPeriodFilter(events, "occurred_at"),
+    [events, applyPeriodFilter]
+  );
+
+  // ── CSV-Generatoren ──────────────────────────────────────────────────────────
+  const BOM = "\uFEFF"; // UTF-8 BOM für korrekte Excel-Darstellung
+
+  const escapeCell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const toRow      = (cols) => cols.map(escapeCell).join(";");
+
+  const periodLabel = {
+    month:  new Date().toLocaleDateString("de-AT", { month: "long", year: "numeric" }),
+    year:   String(new Date().getFullYear()),
+    all:    "Gesamt",
+    custom: customFrom && customTo ? `${customFrom} – ${customTo}` : "Benutzerdefiniert",
+  }[period];
+
+  function sessionsToCSV() {
+    const header = toRow(["Datum", "Modus", "Buy-in (€)", "Cash-out / Gewinn (€)", "Profit (€)", "Notiz"]);
+    const rows   = [...filteredSessions]
+      .sort((a, b) => new Date(a.started_at) - new Date(b.started_at))
+      .map(s => toRow([
+        s.started_at ? new Date(s.started_at).toLocaleDateString("de-AT") : "",
+        s.game_mode === "cashgame" ? "Cash Game" : "Turnier",
+        (s.buy_in   ?? 0).toFixed(2),
+        (s.cash_out ?? s.winnings ?? ""),
+        (s.profit   ?? 0).toFixed(2),
+        s.notes ?? "",
+      ]));
+    return BOM + [header, ...rows].join("\r\n");
+  }
+
+  function transaktionenToCSV() {
+    const header = toRow(["Datum", "Typ", "Betrag (€)", "Notiz"]);
+    const rows   = [...filteredEvents]
+      .sort((a, b) => new Date(a.occurred_at) - new Date(b.occurred_at))
+      .map(e => toRow([
+        e.occurred_at ? new Date(e.occurred_at).toLocaleDateString("de-AT") : "",
+        e.event_type?.toUpperCase() === "DEPOSIT" ? "Einzahlung" : "Auszahlung",
+        Math.abs(e.amount).toFixed(2),
+        e.notes ?? "",
+      ]));
+    return BOM + [header, ...rows].join("\r\n");
+  }
+
+  function reportToCSV() {
+    const profits     = filteredSessions.map(s => s.profit ?? 0);
+    const totalProfit = profits.reduce((a, b) => a + b, 0);
+    const wins        = profits.filter(p => p > 0).length;
+    const winRate     = profits.length > 0 ? (wins / profits.length * 100).toFixed(1) : "—";
+    const avgProfit   = profits.length > 0 ? (totalProfit / profits.length).toFixed(2) : "—";
+    const volume      = filteredSessions.reduce((s, e) => s + (e.buy_in ?? 0), 0);
+    const roi         = volume > 0 ? (totalProfit / volume * 100).toFixed(1) : "—";
+    const bestSession  = profits.length > 0 ? Math.max(...profits) : 0;
+    const worstSession = profits.length > 0 ? Math.min(...profits) : 0;
+    const cash        = filteredSessions.filter(s => s.game_mode === "cashgame");
+    const tourn       = filteredSessions.filter(s => s.game_mode === "tournament");
+    const cashProfit  = cash.reduce((s, e) => s + (e.profit ?? 0), 0);
+    const tournProfit = tourn.reduce((s, e) => s + (e.profit ?? 0), 0);
+    const cashWR      = cash.length > 0  ? (cash.filter(s  => (s.profit ?? 0) > 0).length / cash.length  * 100).toFixed(1) : "—";
+    const tournWR     = tourn.length > 0 ? (tourn.filter(s => (s.profit ?? 0) > 0).length / tourn.length * 100).toFixed(1) : "—";
+
+    const lines = [
+      toRow(["POKER BANKROLL REPORT", ""]),
+      toRow(["Exportiert am", new Date().toLocaleDateString("de-AT")]),
+      toRow(["Zeitraum",      periodLabel]),
+      toRow(["", ""]),
+      toRow(["KPI-ÜBERSICHT", ""]),
+      toRow(["Gesamt-Profit (€)",      totalProfit.toFixed(2)]),
+      toRow(["Sessions gesamt",        filteredSessions.length]),
+      toRow(["Volumen (€)",            volume.toFixed(2)]),
+      toRow(["Gewinnrate (%)",         winRate]),
+      toRow(["Ø Profit/Session (€)",   avgProfit]),
+      toRow(["ROI (%)",                roi]),
+      toRow(["Beste Session (€)",      bestSession.toFixed(2)]),
+      toRow(["Schlechteste Session (€)", worstSession.toFixed(2)]),
+      toRow(["", ""]),
+      toRow(["CASH GAME", ""]),
+      toRow(["Sessions",     cash.length]),
+      toRow(["Profit (€)",   cashProfit.toFixed(2)]),
+      toRow(["Gewinnrate (%)", cashWR]),
+      toRow(["", ""]),
+      toRow(["TURNIERE", ""]),
+      toRow(["Sessions",     tourn.length]),
+      toRow(["Profit (€)",   tournProfit.toFixed(2)]),
+      toRow(["Gewinnrate (%)", tournWR]),
+      toRow(["", ""]),
+      toRow(["ALLE SESSIONS", ""]),
+      toRow(["Datum", "Modus", "Buy-in (€)", "Profit (€)", "Notiz"]),
+      ...[...filteredSessions]
+        .sort((a, b) => new Date(a.started_at) - new Date(b.started_at))
+        .map(s => toRow([
+          s.started_at ? new Date(s.started_at).toLocaleDateString("de-AT") : "",
+          s.game_mode === "cashgame" ? "Cash Game" : "Turnier",
+          (s.buy_in  ?? 0).toFixed(2),
+          (s.profit  ?? 0).toFixed(2),
+          s.notes ?? "",
+        ])),
+    ];
+    return BOM + lines.join("\r\n");
+  }
+
+  // ── Datei-Speichern ──────────────────────────────────────────────────────────
+  function downloadFallback(csv, fname) {
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = fname; a.click();
+    URL.revokeObjectURL(url);
+    setResult({ ok: true, msg: `„${fname}" wird heruntergeladen.` });
+  }
+
+  const handleExport = async () => {
+    setExporting(true);
+    setResult(null);
+    try {
+      const csv   = exportType === "sessions" ? sessionsToCSV()
+                  : exportType === "transaktionen" ? transaktionenToCSV()
+                  : reportToCSV();
+      const fname = `${(filename || "poker_export").trim()}.csv`;
+
+      // 1) Gewählter Ordner: Datei wird direkt dort hineingeschrieben
+      if (dirHandle) {
+        try {
+          let perm = await dirHandle.queryPermission({ mode: "readwrite" });
+          if (perm !== "granted") perm = await dirHandle.requestPermission({ mode: "readwrite" });
+          if (perm !== "granted") throw new Error("Schreibrechte für den Ordner wurden verweigert.");
+
+          const fh       = await dirHandle.getFileHandle(fname, { create: true });
+          const writable = await fh.createWritable();
+          await writable.write(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+          await writable.close();
+          setResult({ ok: true, msg: `„${fname}" wurde in „${dirHandle.name}" gespeichert.` });
+        } catch (e) {
+          setResult({ ok: false, msg: `Fehler beim Speichern in „${dirHandle.name}": ${e.message}` });
+        }
+        return;
+      }
+
+      // 2) Kein Ordner gewählt: nativer Speichern-Dialog (Ordner dort wählbar)
+      if ("showSaveFilePicker" in window) {
+        try {
+          const fh = await window.showSaveFilePicker({
+            suggestedName: fname,
+            types: [{ description: "CSV-Datei", accept: { "text/csv": [".csv"] } }],
+          });
+          const writable = await fh.createWritable();
+          await writable.write(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+          await writable.close();
+          setResult({ ok: true, msg: `„${fname}" erfolgreich gespeichert.` });
+        } catch (e) {
+          if (e.name === "AbortError") { setExporting(false); return; }
+          downloadFallback(csv, fname); // Fallback wenn Fehler beim File API
+        }
+        return;
+      }
+
+      // 3) Fallback für Browser ohne File System Access API (Firefox / Safari)
+      downloadFallback(csv, fname);
+    } catch (e) {
+      setResult({ ok: false, msg: `Fehler beim Export: ${e.message}` });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // ── Styles ───────────────────────────────────────────────────────────────────
+  const dateInput = {
+    background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: "8px",
+    padding: "6px 10px", color: COLORS.text, fontSize: "12px",
+    fontFamily: "'DM Sans', sans-serif", colorScheme: "dark", outline: "none",
+  };
+
+  const EXPORT_TYPES = [
+    { id: "sessions",      label: "Sessions",         desc: "Alle Spielsitzungen mit Profit/Verlust" },
+    { id: "transaktionen", label: "Transaktionen",    desc: "Einzahlungen & Auszahlungen" },
+    { id: "report",        label: "Statistik-Report", desc: "Vollständige KPI-Auswertung + Monatsbericht" },
+  ];
+
+  const rowCount = exportType === "transaktionen" ? filteredEvents.length : filteredSessions.length;
+  const hasFilePicker = "showSaveFilePicker" in window;
+
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 2000, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: "16px", padding: "28px", width: "560px", maxWidth: "95vw", boxShadow: "0 20px 60px rgba(0,0,0,0.6)", maxHeight: "90vh", overflowY: "auto" }}>
+
+        {/* ── Header ── */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "22px" }}>
+          <div>
+            <div style={{ fontSize: "16px", fontWeight: "700", color: COLORS.text, display: "flex", alignItems: "center", gap: "8px" }}>
+              <Icon.Export /> Daten exportieren
+            </div>
+            <div style={{ fontSize: "12px", color: COLORS.textMuted, marginTop: "3px" }}>
+              CSV-Export für externe Weiterverarbeitung &amp; Auswertung
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textDim, fontSize: "22px", lineHeight: 1, padding: "2px 6px", borderRadius: "6px" }}>×</button>
+        </div>
+
+        {/* ── Export-Typ ── */}
+        <div style={{ marginBottom: "20px" }}>
+          <div style={{ fontSize: "11px", fontWeight: "600", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, marginBottom: "8px" }}>Exporttyp</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {EXPORT_TYPES.map(t => (
+              <button key={t.id} onClick={() => setExportType(t.id)} style={{
+                display: "flex", alignItems: "center", gap: "12px", padding: "10px 14px",
+                borderRadius: "10px", cursor: "pointer", textAlign: "left",
+                fontFamily: "'DM Sans', sans-serif",
+                background: exportType === t.id ? `${COLORS.green}15` : COLORS.surface,
+                border:     `1px solid ${exportType === t.id ? COLORS.green + "50" : COLORS.border}`,
+              }}>
+                <div style={{ width: "8px", height: "8px", borderRadius: "50%", flexShrink: 0, transition: "background 0.15s", background: exportType === t.id ? COLORS.green : COLORS.borderLight }} />
+                <div>
+                  <div style={{ fontSize: "13px", fontWeight: "600", color: exportType === t.id ? COLORS.greenText : COLORS.text }}>{t.label}</div>
+                  <div style={{ fontSize: "11px", color: COLORS.textDim, marginTop: "1px" }}>{t.desc}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ borderTop: `1px solid ${COLORS.border}`, margin: "0 -28px 20px" }} />
+
+        {/* ── Zeitraum ── */}
+        <div style={{ marginBottom: "16px" }}>
+          <div style={{ fontSize: "11px", fontWeight: "600", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, marginBottom: "8px" }}>Zeitraum</div>
+          <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+            {[["month","Akt. Monat"],["year","Dieses Jahr"],["all","Gesamt"],["custom","Benutzerdefiniert"]].map(([val, label]) => (
+              <button key={val} onClick={() => setPeriod(val)} style={{
+                padding: "5px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: "600",
+                cursor: "pointer", border: "none", fontFamily: "'DM Sans', sans-serif",
+                background: period === val ? COLORS.green : "transparent",
+                color:      period === val ? "#0d1520" : COLORS.textMuted,
+                outline:    period !== val ? `1px solid ${COLORS.border}` : "none",
+              }}>{label}</button>
+            ))}
+          </div>
+          {period === "custom" && (
+            <div style={{ display: "flex", gap: "10px", marginTop: "10px", alignItems: "center" }}>
+              <span style={{ fontSize: "12px", color: COLORS.textDim, whiteSpace: "nowrap" }}>Von</span>
+              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} style={dateInput} />
+              <span style={{ fontSize: "12px", color: COLORS.textDim, whiteSpace: "nowrap" }}>Bis</span>
+              <input type="date" value={customTo}   onChange={e => setCustomTo(e.target.value)}   style={dateInput} />
+            </div>
+          )}
+        </div>
+
+        {/* ── Spielmodus-Filter (nicht für Transaktionen) ── */}
+        {exportType !== "transaktionen" && (
+          <div style={{ marginBottom: "20px" }}>
+            <div style={{ fontSize: "11px", fontWeight: "600", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, marginBottom: "8px" }}>Spielmodus</div>
+            <div style={{ display: "flex", gap: "4px" }}>
+              {[["all","Alle",null],["cashgame","Cash Game",COLORS.green],["tournament","Turniere",COLORS.gold]].map(([val, label, accent]) => (
+                <button key={val} onClick={() => setMode(val)} style={{
+                  padding: "5px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: "600",
+                  cursor: "pointer", border: "none", fontFamily: "'DM Sans', sans-serif",
+                  background: mode === val ? (accent ? `${accent}20` : COLORS.surface) : "transparent",
+                  color:      mode === val ? (accent ?? COLORS.text) : COLORS.textMuted,
+                  outline: `1px solid ${mode === val ? (accent ? `${accent}55` : COLORS.borderLight) : COLORS.border}`,
+                }}>{label}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{ borderTop: `1px solid ${COLORS.border}`, margin: "0 -28px 20px" }} />
+
+        {/* ── Speicherort (Ordner) ── */}
+        <div style={{ marginBottom: "16px" }}>
+          <div style={{ fontSize: "11px", fontWeight: "600", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, marginBottom: "8px" }}>Speicherort</div>
+
+          {dirPickerSupported ? (
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <div style={{
+                ...dateInput, flex: 1, padding: "9px 12px", fontSize: "13px",
+                border: `1px solid ${COLORS.borderLight}`,
+                color: dirHandle ? COLORS.text : COLORS.textDim,
+                display: "flex", alignItems: "center", gap: "7px",
+                overflow: "hidden",
+              }}>
+                <Icon.Folder />
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {dirHandle ? dirHandle.name : "Download-Ordner (Standard)"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={pickDirectory}
+                style={{ ...css.btnSecondary, padding: "9px 14px", fontSize: "12px", whiteSpace: "nowrap" }}
+              >
+                Ordner wählen…
+              </button>
+              {dirHandle && (
+                <button
+                  type="button"
+                  onClick={clearDirectory}
+                  title="Auswahl zurücksetzen"
+                  style={{
+                    background: "transparent", border: `1px solid ${COLORS.border}`, borderRadius: "8px",
+                    color: COLORS.textDim, fontSize: "16px", lineHeight: 1, padding: "8px 11px", cursor: "pointer",
+                  }}
+                >×</button>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: "11px", color: COLORS.textDim, lineHeight: 1.5 }}>
+              ℹ️ Direkte Ordnerauswahl wird von deinem Browser nicht unterstützt (verfügbar in Chrome / Edge).
+              Der Speicherort kann beim Speichern stattdessen per Datei-Dialog gewählt werden.
+            </div>
+          )}
+        </div>
+
+        {/* ── Dateiname ── */}
+        <div style={{ marginBottom: "20px" }}>
+          <div style={{ fontSize: "11px", fontWeight: "600", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, marginBottom: "8px" }}>Dateiname</div>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <input
+              value={filename}
+              onChange={e => setFilename(e.target.value)}
+              placeholder="poker_export"
+              style={{ ...dateInput, flex: 1, padding: "9px 12px", fontSize: "13px", border: `1px solid ${COLORS.borderLight}` }}
+            />
+            <span style={{ fontSize: "13px", color: COLORS.textDim, flexShrink: 0, fontWeight: "600" }}>.csv</span>
+          </div>
+          <div style={{ fontSize: "11px", color: COLORS.textDim, marginTop: "6px" }}>
+            {dirHandle
+              ? `📁 Wird direkt in „${dirHandle.name}" gespeichert.`
+              : hasFilePicker
+                ? "📂 Speicherort wird im nächsten Schritt per Datei-Dialog gewählt."
+                : "💾 Datei wird direkt in den Download-Ordner gespeichert."}
+          </div>
+        </div>
+
+        {/* ── Vorschau-Info ── */}
+        <div style={{ background: COLORS.surface, borderRadius: "10px", padding: "12px 16px", marginBottom: "20px", border: `1px solid ${COLORS.border}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            {sessLoading ? (
+              <span style={{ fontSize: "12px", color: COLORS.textDim }}>Lade Session-Daten…</span>
+            ) : (
+              <span style={{ fontSize: "12px", color: COLORS.textMuted }}>
+                <span style={{ color: COLORS.greenText, fontWeight: "700" }}>{rowCount}</span>
+                {" "}Einträge ausgewählt · {EXPORT_TYPES.find(t => t.id === exportType)?.label}
+                {period !== "all" && <span style={{ color: COLORS.textDim }}> · {periodLabel}</span>}
+              </span>
+            )}
+            <span style={{ fontSize: "11px", color: COLORS.textDim }}>UTF-8 · Semikolon</span>
+          </div>
+        </div>
+
+        {/* ── Ergebnis-Banner ── */}
+        {result && (
+          <div style={{
+            padding: "10px 14px", borderRadius: "8px", marginBottom: "16px",
+            background: result.ok ? COLORS.greenMuted : COLORS.redMuted,
+            border: `1px solid ${result.ok ? COLORS.green : COLORS.red}40`,
+            color:  result.ok ? COLORS.greenText : COLORS.redText,
+            fontSize: "13px", fontWeight: "600",
+            display: "flex", alignItems: "center", gap: "8px",
+          }}>
+            {result.ok ? "✓" : "✕"} {result.msg}
+          </div>
+        )}
+
+        {/* ── Actions ── */}
+        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={css.btnSecondary}>Abbrechen</button>
+          <button
+            onClick={handleExport}
+            disabled={exporting || sessLoading}
+            style={{ ...css.btnPrimary, opacity: (exporting || sessLoading) ? 0.6 : 1, cursor: (exporting || sessLoading) ? "not-allowed" : "pointer" }}
+          >
+            <Icon.Export />
+            {exporting ? "Exportiere…" : dirHandle ? "In Ordner speichern" : hasFilePicker ? "Speicherort wählen …" : "CSV herunterladen"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // NAVIGATION
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1752,8 +2210,9 @@ const VIEW_META = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function PokerBankrollManager() {
-  const [activeView, setActiveView] = useState("dashboard");
-  const [user,       setUser]       = useState(null);
+  const [activeView,       setActiveView]       = useState("dashboard");
+  const [user,             setUser]             = useState(null);
+  const [showExportModal,  setShowExportModal]  = useState(false);
 
   const {
     events,
@@ -1875,13 +2334,21 @@ export default function PokerBankrollManager() {
             <div style={css.pageSubtitle}>{meta.sub}</div>
           </div>
           <div style={{ display: "flex", gap: "10px" }}>
-            {activeView === "stats" && (
-              <button style={css.btnSecondary}><Icon.Export /> Report exportieren</button>
-            )}
+            <button onClick={() => setShowExportModal(true)} style={css.btnSecondary}>
+              <Icon.Export /> Exportieren
+            </button>
           </div>
         </div>
         <div style={css.content}>{renderView()}</div>
       </div>
+
+      {showExportModal && (
+        <ExportModal
+          userId={user.id}
+          events={events}
+          onClose={() => setShowExportModal(false)}
+        />
+      )}
     </div>
   );
 }
