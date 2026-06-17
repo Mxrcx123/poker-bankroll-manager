@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from model.base import get_db
 from crud.tournamentCrud import TournamentCrud
+# Amir
 
 router = APIRouter()
 
@@ -73,4 +74,4 @@ async def delete_tournament(tournament_id: int, db_session: Session = Depends(ge
         TournamentCrud.delete_tournament(db_session, tournament_id)
         return {"message": "successfully deleted tournament"}
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": str(e)}  

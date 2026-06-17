@@ -14,15 +14,16 @@ async def create_platform(name: str, db_session: Session = Depends(get_db)):
     except Exception as e:
         return {"error": str(e)}
 
-@router.get("/platform/{platform_id}")
-# This endpoint returns a platform based on its id.
-async def get_platform_by_id(platform_id: int, db_session: Session = Depends(get_db)):
+# --- STATISCHE ROUTEN ZUERST ---
+
+@router.get("/platform/all")
+# This endpoint returns all platforms.
+async def get_all_platforms(db_session: Session = Depends(get_db)):
     try:
-        platform = PlatformCrud.get_platform_by_id(db_session, platform_id)
+        platforms = PlatformCrud.get_all_platforms(db_session)
         return {
-            "message": "successfully got platform",
-            "id": platform.id,
-            "name": platform.name
+            "message": "successfully got all platforms",
+            "platforms": [{"id": p.id, "name": p.name} for p in platforms]
         }
     except Exception as e:
         return {"error": str(e)}
@@ -40,14 +41,17 @@ async def get_platform_by_name(name: str, db_session: Session = Depends(get_db))
     except Exception as e:
         return {"error": str(e)}
 
-@router.get("/platform/all" )
-# This endpoint returns all platforms.
-async def get_all_platforms(db_session: Session = Depends(get_db)):
+# --- DYNAMISCHE/GENERISCHE ROUTEN NACH UNTEN ---
+
+@router.get("/platform/{platform_id}")
+# This endpoint returns a platform based on its id.
+async def get_platform_by_id(platform_id: int, db_session: Session = Depends(get_db)):
     try:
-        platforms = PlatformCrud.get_all_platforms(db_session)
+        platform = PlatformCrud.get_platform_by_id(db_session, platform_id)
         return {
-            "message": "successfully got all platforms",
-            "platforms": [{"id": p.id, "name": p.name} for p in platforms]
+            "message": "successfully got platform",
+            "id": platform.id,
+            "name": platform.name
         }
     except Exception as e:
         return {"error": str(e)}
