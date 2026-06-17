@@ -169,7 +169,18 @@ function useSessions(userId) {
                 (t.rebuys  ?? 0) * (t.rebuy_cost  ?? 0) +
                 (t.add_ons ?? 0) * (t.add_on_cost ?? 0);
               const profit = (t.winnings ?? 0) - totalCost;
-              return { ...s, game_mode: "tournament", buy_in: t.buy_in, fee: t.fee, winnings: t.winnings, profit };
+              return {
+                ...s,
+                game_mode: "tournament",
+                buy_in: t.buy_in,
+                fee: t.fee,
+                winnings: t.winnings,
+                rebuys: t.rebuys,
+                rebuy_cost: t.rebuy_cost,
+                add_ons: t.add_ons,
+                add_on_cost: t.add_on_cost,
+                profit
+              };
             }
           } catch {
             return { ...s, profit: 0 };
@@ -983,6 +994,7 @@ function SessionsView({ userId }) {
               </div>
             )}
             {sessions.map((s) => (
+              console.log("SESSION:", s),
               <div key={s.id} style={css.tableRow}>
                 <div style={{ fontSize: "12px", color: COLORS.textMuted }}>
                   {s.started_at ? new Date(s.started_at).toLocaleDateString("de-AT") : "—"}
@@ -991,7 +1003,17 @@ function SessionsView({ userId }) {
                 <div style={{ fontSize: "12px", color: COLORS.textMuted }}>
                   {platforms.find(p => p.id === s.platform_id)?.name ?? s.platform_id ?? "—"}
                 </div>
-                <div style={{ fontSize: "12px", color: COLORS.textDim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.notes || "—"}</div>
+                <div style={{ fontSize: "12px", color: COLORS.textDim }}>
+                  <div>{s.notes || "—"}</div>
+
+                  {s.game_mode === "tournament" && (
+                    <div style={{ fontSize: "12px", color: COLORS.textDim }}>
+                      Rebuys: €{s.rebuy_cost ?? 0}
+                      {" | "}
+                      Add-ons: €{s.add_on_cost ?? 0}
+                    </div>
+                  )}
+                </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "4px", ...css.profit(s.profit) }}>
                   {s.profit >= 0 ? <Icon.TrendUp /> : <Icon.TrendDown />}
                   {s.profit >= 0 ? "+" : ""}€{s.profit}
