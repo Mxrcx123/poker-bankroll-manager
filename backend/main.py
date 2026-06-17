@@ -3,7 +3,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from db.init_db import init_db
-from backend.api.tournament_api import router as tournament_router  # Amir
 
 import model  # Sicherstellen, dass alle Models geladen sind, bevor init_db() aufgerufen wird
 
@@ -11,7 +10,7 @@ import model  # Sicherstellen, dass alle Models geladen sind, bevor init_db() au
 from api.check_api_connection import router as check_router
 from api.userCrud_api import router as user_router
 from api.sessionCrud_api import router as session_router
-from api.cashSessionCrud_api import router as cash_session_routerS
+from api.cashSessionCrud_api import router as cash_session_router
 from api.tournamentCrud_api import router as tournament_router
 from api.gameModeCrud_api import router as game_mode_router
 from api.platformCrud_api import router as platform_router

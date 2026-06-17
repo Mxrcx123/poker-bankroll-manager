@@ -57,10 +57,10 @@ async def update_cash_session(cash_session_id: int, buy_in: float = None, cash_o
     except Exception as e:
         return {"error": str(e)}
 
-@router.put("/cash-session/session/{db_session}/{session_id}/cash-out/{cash_out}")
+@router.put("/cash-session/session/{session_id}/cash-out/{cash_out}")
 # This endpoint records the cash-out value for an existing cash game session.
 # // Story 11
-async def record_cash_out(db_session: Session, session_id: int, cash_out: float):
+async def record_cash_out(session_id: int, cash_out: float, db_session: Session = Depends(get_db)):
     try:
         cash_session = CashSessionCrud.update_cash_out_by_session_id(db_session, session_id, cash_out)
         if cash_session is None:
