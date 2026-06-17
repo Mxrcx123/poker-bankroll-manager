@@ -207,7 +207,7 @@ export default function AuthScreen({ onAuth }) {
 
         {/* Logo */}
         <div style={{
-          width: "56px", height: "56px", borderRadius: "14px",
+          width: "100px", height: "100px", borderRadius: "14px",
           overflow: "hidden", margin: "0 auto 14px",
           }}>
           <img src={logo} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
