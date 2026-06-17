@@ -2072,51 +2072,7 @@ function ExportModal({ userId, events, onClose }) {
 
         <div style={{ borderTop: `1px solid ${COLORS.border}`, margin: "0 -28px 20px" }} />
 
-        {/* ── Speicherort (Ordner) ── */}
-        <div style={{ marginBottom: "16px" }}>
-          <div style={{ fontSize: "11px", fontWeight: "600", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, marginBottom: "8px" }}>Speicherort</div>
-
-          {dirPickerSupported ? (
-            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-              <div style={{
-                ...dateInput, flex: 1, padding: "9px 12px", fontSize: "13px",
-                border: `1px solid ${COLORS.borderLight}`,
-                color: dirHandle ? COLORS.text : COLORS.textDim,
-                display: "flex", alignItems: "center", gap: "7px",
-                overflow: "hidden",
-              }}>
-                <Icon.Folder />
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {dirHandle ? dirHandle.name : "Download-Ordner (Standard)"}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={pickDirectory}
-                style={{ ...css.btnSecondary, padding: "9px 14px", fontSize: "12px", whiteSpace: "nowrap" }}
-              >
-                Ordner wählen…
-              </button>
-              {dirHandle && (
-                <button
-                  type="button"
-                  onClick={clearDirectory}
-                  title="Auswahl zurücksetzen"
-                  style={{
-                    background: "transparent", border: `1px solid ${COLORS.border}`, borderRadius: "8px",
-                    color: COLORS.textDim, fontSize: "16px", lineHeight: 1, padding: "8px 11px", cursor: "pointer",
-                  }}
-                >×</button>
-              )}
-            </div>
-          ) : (
-            <div style={{ fontSize: "11px", color: COLORS.textDim, lineHeight: 1.5 }}>
-              ℹ️ Direkte Ordnerauswahl wird von deinem Browser nicht unterstützt (verfügbar in Chrome / Edge).
-              Der Speicherort kann beim Speichern stattdessen per Datei-Dialog gewählt werden.
-            </div>
-          )}
-        </div>
-
+        
         {/* ── Dateiname ── */}
         <div style={{ marginBottom: "20px" }}>
           <div style={{ fontSize: "11px", fontWeight: "600", letterSpacing: "0.07em", textTransform: "uppercase", color: COLORS.textDim, marginBottom: "8px" }}>Dateiname</div>
