@@ -55,6 +55,16 @@ const api = {
     });
   },
 
+  updateSession: (session_id, platform_id, notes) => {
+    const params = new URLSearchParams();
+    if (platform_id != null) params.append("platform_id", platform_id);
+    if (notes)               params.append("notes",       notes);
+    const qs = params.toString();
+    return apiFetch(`/session/${session_id}${qs ? `?${qs}` : ""}`, {
+      method: "PUT",
+    });
+  },
+
   deleteSession: (session_id) =>
     apiFetch(`/session/delete/${session_id}`, { method: "DELETE" }),
 
@@ -66,6 +76,16 @@ const api = {
     const qs = cash_out != null ? `?cash_out=${cash_out}` : "";
     return apiFetch(`/cash-session/${session_id}/${buy_in}${qs}`, {
       method: "POST",
+    });
+  },
+
+  updateCashSession: (cash_session_id, buy_in, cash_out) => {
+    const params = new URLSearchParams();
+    if (buy_in   != null) params.append("buy_in",   buy_in);
+    if (cash_out != null) params.append("cash_out", cash_out);
+    const qs = params.toString();
+    return apiFetch(`/cash-session/${cash_session_id}${qs ? `?${qs}` : ""}`, {
+      method: "PUT",
     });
   },
 
@@ -85,6 +105,22 @@ const api = {
     const qs = params.toString();
     return apiFetch(`/tournament/${session_id}/${buy_in}${qs ? `?${qs}` : ""}`, {
       method: "POST",
+    });
+  },
+
+  updateTournament: (tournament_id, opts = {}) => {
+    const params = new URLSearchParams();
+    if (opts.buy_in          != null) params.append("buy_in",          opts.buy_in);
+    if (opts.fee             != null) params.append("fee",             opts.fee);
+    if (opts.rebuys          != null) params.append("rebuys",          opts.rebuys);
+    if (opts.rebuy_cost      != null) params.append("rebuy_cost",      opts.rebuy_cost);
+    if (opts.add_ons         != null) params.append("add_ons",         opts.add_ons);
+    if (opts.add_on_cost     != null) params.append("add_on_cost",     opts.add_on_cost);
+    if (opts.winnings        != null) params.append("winnings",        opts.winnings);
+    if (opts.finish_position != null) params.append("finish_position", opts.finish_position);
+    const qs = params.toString();
+    return apiFetch(`/tournament/${tournament_id}${qs ? `?${qs}` : ""}`, {
+      method: "PUT",
     });
   },
 
@@ -151,7 +187,10 @@ function useSessions(userId) {
             if (s.game_mode_id === GAME_MODE_ID.cashgame) {
               const cs     = await api.getCashSession(s.id);
               const profit = (cs.cash_out ?? cs.buy_in) - cs.buy_in;
-              return { ...s, game_mode: "cashgame", buy_in: cs.buy_in, cash_out: cs.cash_out, profit };
+              return {
+                ...s, game_mode: "cashgame", buy_in: cs.buy_in, cash_out: cs.cash_out, profit,
+                cash_session_id: cs.id, // ← neu, für Update nötig
+              };
             } else {
               const t         = await api.getTournament(s.id);
               const totalCost =
@@ -160,7 +199,10 @@ function useSessions(userId) {
                 (t.rebuys  ?? 0) * (t.rebuy_cost  ?? 0) +
                 (t.add_ons ?? 0) * (t.add_on_cost ?? 0);
               const profit = (t.winnings ?? 0) - totalCost;
-              return { ...s, game_mode: "tournament", buy_in: t.buy_in, fee: t.fee, winnings: t.winnings, profit };
+              return {
+                ...s, game_mode: "tournament", buy_in: t.buy_in, fee: t.fee, winnings: t.winnings, profit,
+                tournament_id: t.id, rebuy_cost: t.rebuy_cost, add_on_cost: t.add_on_cost, // ← neu
+              };
             }
           } catch {
             return { ...s, profit: 0 };
@@ -270,6 +312,12 @@ const Icon = {
     <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
       <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
       <path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+    </svg>
+  ),
+  Edit: () => (
+    <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
     </svg>
   ),
   Logout: () => (
@@ -402,7 +450,7 @@ const css = {
     marginBottom: "12px", display: "flex", alignItems: "center", justifyContent: "space-between",
   },
   tableRow: {
-    display: "grid", gridTemplateColumns: "80px 90px 110px 1fr 80px 36px",
+    display: "grid", gridTemplateColumns: "80px 90px 110px 1fr 80px 64px", // 36px → 64px
     gap: "8px", padding: "10px 4px",
     borderBottom: `1px solid ${COLORS.border}`,
     alignItems: "center", fontSize: "13px",
@@ -672,22 +720,25 @@ function MonthlyBarChart({ data }) {
 //   • Notiz-Feld
 // ─────────────────────────────────────────────────────────────────────────────
 
-function SessionCreateForm({ platforms, reloadPlatforms, onSuccess, onCancel }) {
-  const [gameMode,         setGameMode]         = useState("cashgame");
-  const [selectValue,      setSelectValue]      = useState("");
-  const [platformId,       setPlatformId]       = useState(null);
+function SessionCreateForm({ platforms, reloadPlatforms, onSuccess, onCancel, editingSession }) {
+  const isEditing = !!editingSession; // ← Edit- statt Create-Modus
+
+  const [gameMode,         setGameMode]         = useState(editingSession?.game_mode ?? "cashgame");
+  const [selectValue,      setSelectValue]      = useState(editingSession?.platform_id ? String(editingSession.platform_id) : "");
+  const [platformId,       setPlatformId]       = useState(editingSession?.platform_id ?? null);
   const [showNewPlatform,  setShowNewPlatform]  = useState(false);
   const [newPlatformName,  setNewPlatformName]  = useState("");
   const [creatingPlatform, setCreatingPlatform] = useState(false);
   const [platformSuccess,  setPlatformSuccess]  = useState("");
 
-  const [buyIn,    setBuyIn]    = useState("");
-  const [cashOut,  setCashOut]  = useState("");
-  const [fee,      setFee]      = useState("");
-  const [rebuys,   setRebuys]   = useState("");
-  const [addons,   setAddons]   = useState("");
-  const [winnings, setWinnings] = useState("");
-  const [notes,    setNotes]    = useState("");
+  // Felder mit bestehenden Werten vorbefüllen, falls editingSession übergeben wurde
+  const [buyIn,    setBuyIn]    = useState(editingSession ? String(editingSession.buy_in ?? "") : "");
+  const [cashOut,  setCashOut]  = useState(editingSession?.game_mode === "cashgame"   ? String(editingSession.cash_out    ?? "") : "");
+  const [fee,      setFee]      = useState(editingSession?.game_mode === "tournament" ? String(editingSession.fee         ?? "") : "");
+  const [rebuys,   setRebuys]   = useState(editingSession?.game_mode === "tournament" ? String(editingSession.rebuy_cost  ?? "") : "");
+  const [addons,   setAddons]   = useState(editingSession?.game_mode === "tournament" ? String(editingSession.add_on_cost ?? "") : "");
+  const [winnings, setWinnings] = useState(editingSession?.game_mode === "tournament" ? String(editingSession.winnings   ?? "") : "");
+  const [notes,    setNotes]    = useState(editingSession?.notes ?? "");
 
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState(null);
@@ -813,7 +864,7 @@ function SessionCreateForm({ platforms, reloadPlatforms, onSuccess, onCancel }) 
   return (
     <div style={{ ...css.card, marginBottom: "20px", border: `1px solid ${COLORS.borderLight}` }}>
       <div style={{ fontSize: "15px", fontWeight: "700", color: COLORS.text, marginBottom: "18px" }}>
-        Neue Session erfassen
+        {isEditing ? "Session bearbeiten" : "Neue Session erfassen"}
       </div>
 
       {error && (
@@ -833,13 +884,15 @@ function SessionCreateForm({ platforms, reloadPlatforms, onSuccess, onCancel }) 
           {[["cashgame", "Cash Game"], ["tournament", "Turnier"]].map(([val, label]) => (
             <button
               key={val}
-              onClick={() => setGameMode(val)}
+              onClick={() => !isEditing && setGameMode(val)}
+              disabled={isEditing}
               style={{
                 flex: 1, padding: "9px 12px", borderRadius: "8px",
-                cursor: "pointer", border: "none",
+                cursor: isEditing ? "not-allowed" : "pointer", border: "none",
                 fontSize: "13px", fontWeight: "600",
                 fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
                 transition: "all 0.15s",
+                opacity: isEditing && gameMode !== val ? 0.4 : 1,
                 background: gameMode === val
                   ? (val === "cashgame" ? COLORS.greenMuted : COLORS.goldMuted)
                   : COLORS.surface,
@@ -855,6 +908,11 @@ function SessionCreateForm({ platforms, reloadPlatforms, onSuccess, onCancel }) 
             </button>
           ))}
         </div>
+        {isEditing && (
+          <div style={{ fontSize: "11px", color: COLORS.textDim, marginTop: "6px" }}>
+            Spielmodus kann bei einer bestehenden Session nicht geändert werden.
+          </div>
+        )}
       </div>
 
       {/* ── Plattform ── */}
@@ -1015,7 +1073,7 @@ function SessionCreateForm({ platforms, reloadPlatforms, onSuccess, onCancel }) 
           disabled={saving}
           style={{ ...css.btnPrimary, opacity: saving ? 0.6 : 1, cursor: saving ? "not-allowed" : "pointer" }}
         >
-          {saving ? "Speichert …" : "Session speichern"}
+          {saving ? "Speichert …" : isEditing ? "Änderungen speichern" : "Session speichern"}
         </button>
       </div>
     </div>
@@ -1345,6 +1403,7 @@ function SessionsView({ userId }) {
   const { platforms, reload: reloadPlatforms }         = usePlatforms();
   const [showCreateForm,  setShowCreateForm]           = useState(false);
   const [sessionToDelete, setSessionToDelete]          = useState(null);
+  const [sessionToEdit,   setSessionToEdit]            = useState(null);
 
   const handleAddSession = async (formData) => {
     const game_mode_id = GAME_MODE_ID[formData.game_mode] ?? 1;
@@ -1377,6 +1436,28 @@ function SessionsView({ userId }) {
     await reload();
   };
 
+  const handleEditSession = async (session, formData) => {
+    await api.updateSession(session.id, formData.platform_id, formData.notes);
+
+    if (formData.game_mode === "cashgame") {
+      await api.updateCashSession(session.cash_session_id, formData.buy_in, formData.cash_out);
+    } else {
+      const rebuys_total = formData.rebuys ?? 0;
+      const addons_total = formData.addons ?? 0;
+      await api.updateTournament(session.tournament_id, {
+        buy_in:      formData.buy_in,
+        fee:         formData.fee    ?? null,
+        rebuys:      rebuys_total > 0 ? 1 : 0,
+        rebuy_cost:  rebuys_total > 0 ? rebuys_total : null,
+        add_ons:     addons_total > 0 ? 1 : 0,
+        add_on_cost: addons_total > 0 ? addons_total : null,
+        winnings:    formData.winnings ?? 0,
+      });
+    }
+
+    await reload();
+  };
+
   const handleDeleteConfirm = async (id) => {
     try {
       await api.deleteSession(id);
@@ -1397,17 +1478,27 @@ function SessionsView({ userId }) {
       />
 
       <div style={{ marginBottom: "20px" }}>
-        {!showCreateForm ? (
-          <button onClick={() => setShowCreateForm(true)} style={{ ...css.btnPrimary, padding: "12px 20px" }}>
-            <Icon.Plus /> Neue Session erfassen
-          </button>
-        ) : (
+        {showCreateForm && (
           <SessionCreateForm
             platforms={platforms}
             reloadPlatforms={reloadPlatforms}
             onSuccess={handleAddSession}
             onCancel={() => setShowCreateForm(false)}
           />
+        )}
+        {sessionToEdit && (
+          <SessionCreateForm
+            platforms={platforms}
+            reloadPlatforms={reloadPlatforms}
+            editingSession={sessionToEdit}
+            onSuccess={(formData) => handleEditSession(sessionToEdit, formData)}
+            onCancel={() => setSessionToEdit(null)}
+          />
+        )}
+        {!showCreateForm && !sessionToEdit && (
+          <button onClick={() => setShowCreateForm(true)} style={{ ...css.btnPrimary, padding: "12px 20px" }}>
+            <Icon.Plus /> Neue Session erfassen
+          </button>
         )}
       </div>
 
@@ -1442,12 +1533,20 @@ function SessionsView({ userId }) {
                   {s.profit >= 0 ? <Icon.TrendUp /> : <Icon.TrendDown />}
                   {s.profit >= 0 ? "+" : ""}€{s.profit}
                 </div>
-                <button
-                  onClick={() => setSessionToDelete(s)}
-                  style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textDim, padding: "4px", borderRadius: "6px" }}
-                >
-                  <Icon.Trash />
-                </button>
+                <div style={{ display: "flex", gap: "4px", justifyContent: "flex-end" }}>
+                  <button
+                    onClick={() => setSessionToEdit(s)}
+                    style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textDim, padding: "4px", borderRadius: "6px" }}
+                  >
+                    <Icon.Edit />
+                  </button>
+                  <button
+                    onClick={() => setSessionToDelete(s)}
+                    style={{ background: "transparent", border: "none", cursor: "pointer", color: COLORS.textDim, padding: "4px", borderRadius: "6px" }}
+                  >
+                    <Icon.Trash />
+                  </button>
+                </div>
               </div>
             ))}
           </>
