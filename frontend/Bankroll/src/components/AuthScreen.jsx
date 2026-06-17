@@ -1,5 +1,6 @@
 import { useState } from "react";
-
+import logo from "../assets/logo.png";
+import bgImage from "../assets/hintergrund.png";
 // ─────────────────────────────────────────────────────────────────────────────
 // Identisches Farbschema wie der Rest des Projekts
 // ─────────────────────────────────────────────────────────────────────────────
@@ -188,11 +189,12 @@ export default function AuthScreen({ onAuth }) {
   return (
     <div style={{
       minHeight: "100vh", width: "100%",
-      background: COLORS.bg,
+      background: `linear-gradient(rgba(13,21,32,0.75), rgba(13,21,32,0.85)), url(${bgImage})`,
+      backgroundSize: "cover", backgroundPosition: "center",
       display: "flex", alignItems: "center", justifyContent: "center",
       fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
       padding: "20px", boxSizing: "border-box",
-    }}>
+      }}>
       {/* Hintergrund-Deko */}
       <div style={{
         position: "fixed", inset: 0, pointerEvents: "none", overflow: "hidden",
@@ -204,21 +206,11 @@ export default function AuthScreen({ onAuth }) {
       <div style={{ width: "100%", maxWidth: "400px", position: "relative" }}>
 
         {/* Logo */}
-        <div style={{ textAlign: "center", marginBottom: "32px" }}>
-          <div style={{
-            width: "56px", height: "56px", borderRadius: "14px",
-            background: `linear-gradient(135deg, ${COLORS.green}, ${COLORS.greenDim})`,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            margin: "0 auto 14px", color: "#0d1520",
+        <div style={{
+          width: "56px", height: "56px", borderRadius: "14px",
+          overflow: "hidden", margin: "0 auto 14px",
           }}>
-            <ChipsIcon />
-          </div>
-          <div style={{ fontSize: "20px", fontWeight: "800", color: COLORS.text, letterSpacing: "-0.02em" }}>
-            Bankroll Manager
-          </div>
-          <div style={{ fontSize: "12px", color: COLORS.textMuted, marginTop: "4px", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-            Poker Tracker
-          </div>
+          <img src={logo} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         </div>
 
         {/* Card */}

@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import AddDeposit from "./AddDeposit.jsx";
 import RecordWithdrawal from "./RecordWithdrawl.jsx";
 import AuthScreen from "./AuthScreen.jsx";
-
+import logo from "../assets/logo.png";
+import bgImage from "../assets/hintergrund.png";
 // ─────────────────────────────────────────────────────────────────────────────
 // API CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
@@ -362,13 +363,16 @@ const COLORS = {
 
 const css = {
   app: {
-    display: "flex", height: "100vh", width: "100vw",
-    overflow: "hidden",
-    background: COLORS.bg,
-    fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
-    color: COLORS.text,
-    position: "fixed", top: 0, left: 0,
-  },
+  display: "flex", height: "100vh", width: "100vw",
+  overflow: "hidden",
+  background: `linear-gradient(rgba(13,21,32,0.95), rgba(13,21,32,0.97)), url(${bgImage})`,
+  backgroundSize: "cover",
+  backgroundPosition: "center",
+  backgroundAttachment: "fixed",
+  fontFamily: "'DM Sans', 'Segoe UI', sans-serif",
+  color: COLORS.text,
+  position: "fixed", top: 0, left: 0,
+},
   sidebar: {
     width: "220px", minWidth: "220px",
     background: COLORS.surface,
@@ -2339,12 +2343,19 @@ export default function PokerBankrollManager() {
     <div style={css.app}>
       <div style={css.sidebar}>
         <div style={css.logo}>
-          <div style={css.logoIcon}><Icon.Chips /></div>
+          <div style={{ ...css.logoIcon, overflow: "hidden", flexShrink: 0 }}>
+            <img
+              src={logo}
+              alt="Logo"
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            />
+          </div>
           <div>
             <div style={css.logoText}>Bankroll</div>
             <div style={css.logoSub}>Poker Manager</div>
           </div>
         </div>
+
         <nav style={css.nav}>
           {VIEWS.map((v) => (
             <button key={v.id} onClick={() => setActiveView(v.id)} style={css.navItem(activeView === v.id)}>
