@@ -32,13 +32,13 @@ class TournamentUpdate(BaseModel):
 class TournamentResponse(BaseModel):
     id: int
     session_id: int
-    buy_in: Money2
-    fee: Optional[Money2]
+    buy_in: Optional[Decimal]
+    fee: Optional[Decimal]
     rebuys: int
-    rebuy_cost: Optional[Money2]
+    rebuy_cost: Optional[Decimal]
     add_ons: int
-    add_on_cost: Optional[Money2]
-    winnings: Money2
+    add_on_cost: Optional[Decimal]
+    winnings: Optional[Decimal]
     finish_position: Optional[int]
 
     class Config:

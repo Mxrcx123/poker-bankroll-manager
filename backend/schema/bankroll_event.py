@@ -23,7 +23,7 @@ class BankrollEventUpdate(BaseModel):
 class BankrollEventResponse(BaseModel):
     id: int
     user_id: int
-    amount: Money2
+    amount: Optional[Decimal]
     event_type: str
     occurred_at: datetime
     notes: Optional[str]

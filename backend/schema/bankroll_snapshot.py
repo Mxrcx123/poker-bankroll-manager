@@ -18,7 +18,7 @@ class BankrollSnapshotUpdate(BaseModel):
 class BankrollSnapshotResponse(BaseModel):
     id: int
     user_id: int
-    amount: Money2
+    amount: Decimal
     recorded_at: datetime
 
     class Config:

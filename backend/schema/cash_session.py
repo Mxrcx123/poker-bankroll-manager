@@ -20,8 +20,8 @@ class CashSessionUpdate(BaseModel):
 class CashSessionResponse(BaseModel):
     id: int
     session_id: int
-    buy_in: Money2
-    cash_out: Optional[Money2]
+    buy_in: Optional[Decimal]
+    cash_out: Optional[Decimal]
 
     class Config:
         from_attributes = True
