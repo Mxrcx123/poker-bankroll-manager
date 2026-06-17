@@ -2,6 +2,9 @@ import { useState, useEffect } from "react";
 import AddDeposit from "./AddDeposit.jsx";
 import RecordWithdrawal from "./RecordWithdrawl.jsx";
 import CreateSession from "./CreateSession.jsx";
+import CashgameCalculatorDemo from "./CashgameCalculatorDemo.jsx";
+import CalculateCashgameProfit from "./CalculateCashgameProfit.jsx";
+import CalculateCashOut from "./CalculateCashOut.jsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOCK DATA — später durch API-Calls ersetzen
@@ -130,6 +133,15 @@ const Icon = {
   Export: () => (
     <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
       <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
+    </svg>
+  ),
+  Calculator: () => (
+    <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
+      <rect x="4" y="6" width="16" height="6" />
+      <line x1="8" y1="15" x2="8" y2="18" />
+      <line x1="16" y1="15" x2="16" y2="18" />
+      <line x1="8" y1="18" x2="16" y2="18" />
     </svg>
   ),
 };
@@ -640,6 +652,14 @@ function StatsView() {
   );
 }
 
+function CalculatorView() {
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <CashgameCalculatorDemo />
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // NAVIGATION
 // ─────────────────────────────────────────────────────────────────────────────
@@ -649,6 +669,7 @@ const VIEWS = [
   { id: "transaktionen", label: "Transaktionen",Icon: Icon.Bankroll  },
   { id: "history",       label: "History",      Icon: Icon.History   },
   { id: "sessions",      label: "Sessions",     Icon: Icon.Sessions  },
+  { id: "calculator",    label: "Kalkulator",   Icon: Icon.Calculator},
   { id: "stats",         label: "Statistiken",  Icon: Icon.Stats     },
 ];
 
@@ -657,6 +678,7 @@ const VIEW_META = {
   transaktionen: { title: "Transaktionen", sub: "Einzahlungen & Auszahlungen erfassen"     },
   history:       { title: "History",       sub: "Alle Einzahlungen & Auszahlungen"         },
   sessions:      { title: "Sessions",      sub: "Cashgame & Turniere erfassen"             },
+  calculator:    { title: "Kalkulator",    sub: "Cashgame Session Kalkulator"              },
   stats:         { title: "Statistiken",   sub: "Analyse deiner Poker-Performance"         },
 };
 
@@ -673,6 +695,7 @@ export default function PokerBankrollManager() {
     case "transaktionen": return <TransaktionenView onNavigate={setActiveView} />;
     case "history":       return <HistoryView />;
     case "sessions":      return <SessionsView />;
+    case "calculator":    return <CalculatorView />;
     case "stats":         return <StatsView />;
     default:              return <DashboardView />;
   }
