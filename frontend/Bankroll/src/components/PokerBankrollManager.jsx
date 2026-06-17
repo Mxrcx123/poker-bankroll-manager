@@ -1442,6 +1442,8 @@ export default function PokerBankrollManager() {
         );
       case "sessions":
         return <SessionsView userId={user.id} />;
+      case "calculator":
+        return <CalculatorView />;
       case "stats":
         return (
           <StatsView
