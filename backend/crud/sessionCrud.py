@@ -1,9 +1,7 @@
 # File Change Auther: "Stefan Derler"
 
 from sqlalchemy.orm import Session as DBSession
-from model.Session import Session
-# // Story 12
-from model.cash_session import CashSession
+from model.session import Session # geändert Amir
 
 
 class SessionCrud():

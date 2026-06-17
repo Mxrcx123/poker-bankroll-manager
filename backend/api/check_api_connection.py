@@ -1,8 +1,8 @@
-from fastapi import FastAPI
+from fastapi import APIRouter
 
-app = FastAPI()
+router = APIRouter()
 
-@app.get("/")
+@router.get("/")
 # This endpoint checks if the backend connection is working by returning a simple message.
 async def root():
     return {"message": "Backend connection Works"}
