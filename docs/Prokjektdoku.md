@@ -44,7 +44,7 @@ Technologien:
 
 ### Backend
 
-Das Backend verarbeitet die Geschäftslogik und stellt die nötigen REST-Schnittstellen bereit.
+Das Backend stellt die nötigen REST-Schnittstellen bereit.
 
 Aufgaben:
 
@@ -122,7 +122,7 @@ Gespeicherte Informationen:
 
 ### Pokersessions
 
-Für jede Session können verschiedene Informationen gespeichert werden:
+Für jede Session können Informationen gespeichert werden:
 
 - Datum
 - Spieltyp
@@ -139,7 +139,7 @@ Die aktuelle Bankroll wird automatisch aus allen Transaktionen berechnet.
 
 Formel:
 
-```text
+```
 Bankroll = Deposits - Withdrawals + Sessionergebnisse
 ```
 
@@ -149,19 +149,9 @@ Bankroll = Deposits - Withdrawals + Sessionergebnisse
 
 Die Kommunikation zwischen Frontend und Backend erfolgt über REST-APIs.
 
-Beispiel:
-
-```text
-Frontend → API → Backend → Datenbank
-                         ↓
-Frontend ← JSON ← Backend
-```
-
----
-
 ## Entwicklungsprozess
 
-Das Projekt wurde mit Git und GitHub verwaltet.
+Das Projekt wurde mit Git und GitHub verwaltet und über Jira die User Storys verwaltet.
 
 Verwendete Branches:
 
@@ -181,36 +171,23 @@ Zur Integration der einzelnen Entwicklungsstände wurde ein gemeinsamer Staging-
 
 ---
 
-## Herausforderungen während der Entwicklung
-
-Während der Entwicklung traten mehrere Herausforderungen auf. Da mehrere Entwickler gleichzeitig an verschiedenen Features arbeiteten, entstanden unterschiedliche Entwicklungsstände und zahlreiche Branches, mehrere Ordnerstrukturen und und und.
-
-Besonders aufwendig waren:
-
-- Merge-Konflikte zwischen verschiedenen Branches
-- Unterschiedliche Implementierungen der ursprünglichen Ordnerstruktur
-- Vereinheitlichung der Projektstruktur
-- Wiederherstellung eines lauffähigen Gesamtsystems
-
----
-
 ## Entwicklungsaufwand und Integration
 
 Ein besonders aufwendiger Teil war die Zusammenführung der einzelnen Entwicklungsstände der Teammitglieder. Da mehrere Entwickler gleichzeitig an unterschiedlichen Features gearbeitet haben, entstanden zahlreiche Branches mit unterschiedlichen Projektständen.
 
-Die größte Herausforderung bestand darin, die Branches zu analysieren, zusammenzuführen und auftretende Konflikte zu beheben. Besonders bei der Integration von Frontend und Backend traten mehrfach Probleme auf, da verschiedene Entwickler an ähnlichen Komponenten gearbeitet haben.
+Die größte Herausforderung bestand darin, die Branches zusammenzuführen und auftretende Konflikte zu beheben. 
 
 Während der Integration mussten unter anderem:
 
 - Merge-Konflikte gelöst werden,
 - Änderungen verschiedener Entwickler verglichen werden,
-- inkompatible Codeabschnitte angepasst werden weil ein abhängiger teil nicht da war z.b.,
+- inkompatible Codeabschnitte angepasst werden weil ein abhängiger teil nicht da war z.b.
 - Frontend und Backend miteinander verbunden werden,
 - sowie die Funktionsfähigkeit des Gesamtsystems sichergestellt werden.
 
-Ein großer Teil der Projektarbeit bestand daher nicht nur aus dem Schreiben von neuem Code, sondern auch aus dem Integrieren, Testen und Debuggen bereits bestehender Funktionen.
+Ein großer Teil der Projektarbeit bestand daher nicht nur aus schreiben von Code, sondern auch aus Integrieren, testen und Debuggen bereits bestehender.
 
-Dadurch konnte am Ende eine gemeinsame und funktionierende Version des Projekts erstellt werden.
+Dadurch konnte am Ende eine funktionierende Version des Projekts erstellt werden.
 
 ---
 
@@ -219,7 +196,6 @@ Dadurch konnte am Ende eine gemeinsame und funktionierende Version des Projekts 
 Zur Sicherstellung der Funktionsfähigkeit wurden verschiedene Maßnahmen durchgeführt:
 
 - Manuelle Tests
-- Merge-Tests
 - Code-Reviews
 - Konfliktbehebung während der Integration
 - Testen der API-Endpunkte (nach dem 1. sprint)
@@ -245,17 +221,9 @@ npm run dev
 
 ---
 
-## Zukünftige Erweiterungen
-
-- 
-- 
-- 
-
----
-
 ## Persönliche Erfahrungen und Lernerfolge
 
-Durch die Entwicklung dieses Projekts konnten viele praktische Erfahrungen gesammelt werden, die über den normalen Unterricht hinausgehen.
+Durch die Entwicklung dieses Projekts konnten viele Erfahrungen gesammelt werden, die über den einzel Unterricht hinausgehen.
 
 Besonders verbessert wurden unsere Kenntnisse in folgenden Bereichen:
 
@@ -273,7 +241,7 @@ Das Projekt zeigte, dass Softwareentwicklung nicht nur aus Programmieren besteht
 
 ## Fazit
 
-Mit dem Poker Bankroll Manager konnte eine vollständige Webanwendung zur Verwaltung und Analyse einer Poker-Bankroll entwickelt werden.
+Mit dem Poker Bankroll Manager konnte eine Webanwendung zur Verwaltung und Analyse einer Poker-Bankroll entwickelt werden.
 
 Trotz zahlreicher Herausforderungen während der Entwicklung – insbesondere durch unterschiedliche Branches, Merge-Konflikte und die Integration verschiedener Komponenten – konnte eine funktionierende Gesamtlösung erstellt werden.
 
@@ -301,5 +269,4 @@ Autor des Dokuments:
 ---
 
 ## Lizenz
-
 Dieses Projekt wurde im Rahmen eines Schulprojekts entwickelt und dient ausschließlich Ausbildungszwecken.
