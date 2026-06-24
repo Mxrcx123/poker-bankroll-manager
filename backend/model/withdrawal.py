@@ -11,7 +11,7 @@ class Withdrawal(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     # FIX: nullable=False — jede Auszahlung muss einem User gehören
-    user_id = Column(Integer, ForeignKey("users.id", onupdate="CASCADE", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", onupdate="CASCADE", ondelete="CASCADE"), nullable=True)
     amount = Column(Numeric(12, 2), nullable=False)
     currency = Column(String(10), nullable=True)
     date = Column(DateTime(timezone=True), nullable=False, default=datetime.now)
